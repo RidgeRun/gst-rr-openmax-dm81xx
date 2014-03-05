@@ -7,6 +7,7 @@ libgstrromx_la_SOURCES = \
 	gstomxbase.c gstomxbase.h \
 	gstomxerror.c gstomxerror.h \
 	gstomxmpeg2dec.c gstomxmpeg2dec.h \
+	gstomxh264dec.c gstomxh264dec.h \
 	gstomxscaler.c gstomxscaler.h \
 	gstomxbuftab.c gstomxbuftab.h
 
@@ -23,5 +24,6 @@ noinst_HEADERS = \
 	gstomxpad.h \
 	gstomxbase.h \
 	gstomxmpeg2dec.h \
+	gstomxh264dec.h \
 	gstomxscaler.h \
 	gstomxbuftab.h
