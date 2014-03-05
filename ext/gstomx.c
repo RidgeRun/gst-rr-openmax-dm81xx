@@ -29,6 +29,7 @@
 #include <OMX_Core.h>
 
 #include "gstomxmpeg2dec.h"
+#include "gstomxh264dec.h"
 #include "gstomxscaler.h"
 
 /* entry point to initialize the plug-in
@@ -65,6 +66,10 @@ omx_init (GstPlugin * omx)
 
   if (!gst_element_register (omx, "omx_mpeg2dec", GST_RANK_NONE,
           GST_TYPE_OMX_MPEG2_DEC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_h264dec", GST_RANK_NONE,
+      GST_TYPE_OMX_H264_DEC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_scaler", GST_RANK_NONE,
