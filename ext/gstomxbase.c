@@ -109,7 +109,7 @@ static OMX_ERRORTYPE gst_omx_base_alloc_buffers (GstOmxBase * this,
 static OMX_ERRORTYPE gst_omx_base_free_buffers (GstOmxBase * this,
     GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE gst_omx_base_for_each_pad (GstOmxBase * this,
-    GstOmxBasePadFunc func, gpointer data);
+    GstOmxBasePadFunc func, GstPadDirection direction, gpointer data);
 static OMX_ERRORTYPE gst_omx_base_event_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_EVENTTYPE event, guint32 nevent1, guint32 nevent2,
     gpointer eventdata);
@@ -367,6 +367,25 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   if (flushing)
     goto flushing;
 
+  if (!this->started) {
+    if (!omxpad->buffers->table && GST_OMX_IS_OMX_BUFFER (buf)) {
+      GstOmxBufferData *peerbufdata;
+      GstOmxPad *peerpad = NULL;
+
+      GST_INFO_OBJECT (this, "Getting omx peer buftab to share");
+      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+      peerbufdata = (GstOmxBufferData *) omxpeerbuf->pAppPrivate;
+      peerpad = peerbufdata->pad;
+
+      gst_omx_base_alloc_buffers (this, omxpad, peerpad);
+    }
+
+    GST_INFO_OBJECT (this, "Starting component");
+    error = gst_omx_base_start (this);
+    if (GST_OMX_FAIL (error))
+      goto nostart;
+  }
+
   /* If an upstream asked for buffer allocations, we may have buffers
      marked as busy even though no buffers have been processed yet. This
      is the time to mark them as free and start the steady state */
@@ -426,7 +445,12 @@ flushing:
     gst_buffer_unref (buf);
     return GST_FLOW_OK;
   }
-
+nostart:
+  {
+    GST_ERROR_OBJECT (this, "Unable to start component: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
+  }
 notfound:
   {
     GST_ERROR_OBJECT (this,
@@ -487,10 +511,27 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
       goto nostartstop;
   }
 
-  GST_INFO_OBJECT (this, "Starting component");
-  error = gst_omx_base_start (this);
+  if (!klass->init_ports)
+    goto noinitports;
+
+  error = klass->init_ports (this);
   if (GST_OMX_FAIL (error))
-    goto nostartstop;
+    goto nopads;
+
+  GST_INFO_OBJECT (this, "Sending handle to Idle");
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_SendCommand (this->handle, OMX_CommandStateSet, OMX_StateIdle,
+      NULL);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto starthandle;
+
+  GST_INFO_OBJECT (this, "Allocating buffers for src ports");
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_alloc_buffers, GST_PAD_SRC,
+      NULL);
+  if (GST_OMX_FAIL (error))
+    goto noalloc;
 
   GST_DEBUG_OBJECT (this, "Caps %s set successfully",
       gst_caps_to_string (caps));
@@ -513,34 +554,42 @@ nostartstop:
         gst_omx_error_to_str (error));
     return FALSE;
   }
+nopads:
+  {
+    GST_ERROR_OBJECT (this, "Unable to initializate ports");
+    return error;
+  }
+noinitports:
+  {
+    GST_ERROR_OBJECT (this, "%s doesn't have an init ports function",
+        GST_OBJECT_NAME (this));
+    error = OMX_ErrorNotImplemented;
+    return error;
+  }
+starthandle:
+  {
+    GST_ERROR_OBJECT (this, "Unable to set handle to Idle");
+    return error;
+  }
+noalloc:
+  {
+    GST_ERROR_OBJECT (this, "Unable to allocate resources for src buffers");
+    return error;
+  }
 }
 
 static OMX_ERRORTYPE
 gst_omx_base_start (GstOmxBase * this)
 {
-  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (this->started)
     goto alreadystarted;
 
-  if (!klass->init_ports)
-    goto noinitports;
-
-  error = klass->init_ports (this);
-  if (GST_OMX_FAIL (error))
-    goto nopads;
-
-  GST_INFO_OBJECT (this, "Sending handle to Idle");
-  g_mutex_lock (&_omx_mutex);
-  error = OMX_SendCommand (this->handle, OMX_CommandStateSet, OMX_StateIdle,
+  GST_INFO_OBJECT (this, "Allocating buffers for sink ports");
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_alloc_buffers, GST_PAD_SINK,
       NULL);
-  g_mutex_unlock (&_omx_mutex);
-  if (GST_OMX_FAIL (error))
-    goto starthandle;
-
-  GST_INFO_OBJECT (this, "Allocating buffers for ports");
-  error = gst_omx_base_for_each_pad (this, gst_omx_base_alloc_buffers, NULL);
   if (GST_OMX_FAIL (error))
     goto noalloc;
 
@@ -567,7 +616,9 @@ gst_omx_base_start (GstOmxBase * this)
     goto starthandle;
 
   GST_INFO_OBJECT (this, "Pushing output buffers");
-  error = gst_omx_base_for_each_pad (this, gst_omx_base_push_buffers, NULL);
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_push_buffers,
+      GST_PAD_UNKNOWN, NULL);
   if (GST_OMX_FAIL (error))
     goto nopush;
 
@@ -578,18 +629,6 @@ gst_omx_base_start (GstOmxBase * this)
 alreadystarted:
   {
     GST_WARNING_OBJECT (this, "Component already started");
-    return error;
-  }
-noinitports:
-  {
-    GST_ERROR_OBJECT (this, "%s doesn't have an init ports function",
-        GST_OBJECT_NAME (this));
-    error = OMX_ErrorNotImplemented;
-    return error;
-  }
-nopads:
-  {
-    GST_ERROR_OBJECT (this, "Unable to initializate ports");
     return error;
   }
 starthandle:
@@ -622,7 +661,9 @@ gst_omx_base_stop (GstOmxBase * this)
   GST_OBJECT_UNLOCK (this);
 
   GST_INFO_OBJECT (this, "Flushing ports");
-  error = gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports, NULL);
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+      GST_PAD_UNKNOWN, NULL);
   if (GST_OMX_FAIL (error))
     goto noflush;
 
@@ -650,7 +691,9 @@ gst_omx_base_stop (GstOmxBase * this)
     goto statechange;
 
   GST_INFO_OBJECT (this, "Freeing port buffers");
-  error = gst_omx_base_for_each_pad (this, gst_omx_base_free_buffers, NULL);
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_free_buffers,
+      GST_PAD_UNKNOWN, NULL);
   if (GST_OMX_FAIL (error))
     goto nofree;
 
@@ -718,7 +761,7 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
 
 static OMX_ERRORTYPE
 gst_omx_base_for_each_pad (GstOmxBase * this, GstOmxBasePadFunc func,
-    gpointer data)
+    GstPadDirection direction, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   GstIterator *iter;
@@ -730,9 +773,12 @@ gst_omx_base_for_each_pad (GstOmxBase * this, GstOmxBasePadFunc func,
     while (!done) {
       switch (gst_iterator_next (iter, (gpointer) & pad)) {
         case GST_ITERATOR_OK:
-          error = func (this, GST_OMX_PAD (pad), data);
-          if (GST_OMX_FAIL (error))
-            goto failed;
+          if ((direction == GST_PAD_UNKNOWN)
+              || (direction == GST_PAD_DIRECTION (pad))) {
+            error = func (this, GST_OMX_PAD (pad), data);
+            if (GST_OMX_FAIL (error))
+              goto failed;
+          }
           gst_object_unref (pad);
           break;
         case GST_ITERATOR_RESYNC:
@@ -766,12 +812,28 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   OMX_BUFFERHEADERTYPE *buffer = NULL;
   OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
   GstBuffer *peerbuf = NULL;
+  GList *peerbuffers = NULL;
   guint i;
   GstOmxBufferData *bufdata;
   guint32 maxsize;
 
+  if (pad->buffers->table != NULL) {
+    GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
+        GST_DEBUG_PAD_NAME (GST_PAD (pad)));
+    return error;
+  }
+
   GST_DEBUG_OBJECT (this, "Allocating buffers for %s:%s",
       GST_DEBUG_PAD_NAME (GST_PAD (pad)));
+
+  if (data) {
+    GstOmxPad *peerpad = peerpad = GST_OMX_PAD (data);
+    if (pad->port->nBufferCountActual > peerpad->port->nBufferCountActual) {
+      error = OMX_ErrorInsufficientResources;
+      goto nouse;
+    }
+    peerbuffers = peerpad->buffers->table;
+  }
 
   for (i = 0; i < pad->port->nBufferCountActual; ++i) {
 
@@ -794,10 +856,13 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       } else {
         goto nodownstream;
       }
+    } else if (GST_PAD_IS_SINK (pad) && peerbuffers) {
+      omxpeerbuffer = ((GstOmxBufTabNode *) peerbuffers->data)->buffer;
+      peerbuffers = g_list_next (peerbuffers);
     }
 
     if (omxpeerbuffer) {
-      GST_DEBUG_OBJECT (this, "Received downstream buffer number %u:"
+      GST_DEBUG_OBJECT (this, "Received buffer number %u:"
           "%p of size %d", i, omxpeerbuffer->pBuffer,
           (int) omxpeerbuffer->nAllocLen);
 
@@ -1009,8 +1074,7 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     return error;
 
   g_mutex_lock (&_omx_mutex);
-  error =
-      OMX_SendCommand (this->handle, OMX_CommandFlush, -1, NULL);
+  error = OMX_SendCommand (this->handle, OMX_CommandFlush, -1, NULL);
   g_mutex_unlock (&_omx_mutex);
 
   GST_DEBUG_OBJECT (this, "Waiting for port to flush");
@@ -1086,7 +1150,7 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
       if (OMX_CommandPortEnable == nevent1) {
         g_mutex_lock (&this->waitmutex);
         gst_omx_base_for_each_pad (this, gst_omx_base_enable_pad,
-            (gpointer) nevent2);
+            GST_PAD_UNKNOWN, (gpointer) nevent2);
         g_cond_signal (&this->waitcond);
         g_mutex_unlock (&this->waitmutex);
       }
@@ -1094,7 +1158,7 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
       if (OMX_CommandFlush == nevent1) {
         g_mutex_lock (&this->waitmutex);
         gst_omx_base_for_each_pad (this, gst_omx_base_set_flushing_pad,
-            (gpointer) nevent2);
+            GST_PAD_UNKNOWN, (gpointer) nevent2);
         g_cond_signal (&this->waitcond);
         g_mutex_unlock (&this->waitmutex);
       }
@@ -1337,6 +1401,13 @@ gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
   if (!gst_pad_set_caps (pad, caps))
     goto invalidcaps;
 
+  if (!omxpad->buffers->table) {
+    GST_INFO_OBJECT (this, "Allocating buffers for sink ports");
+    error = gst_omx_base_alloc_buffers (this, GST_OMX_PAD (pad), NULL);
+    if (GST_OMX_FAIL (error))
+      goto noalloc;
+  }
+
   /* If we are here, buffers where successfully allocated */
   error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
   if (GST_OMX_FAIL (error))
@@ -1365,6 +1436,11 @@ nofreebuf:
   {
     GST_ERROR_OBJECT (this, "Unable to get free buffer: %s",
         gst_omx_error_to_str (error));
+    return GST_FLOW_ERROR;
+  }
+noalloc:
+  {
+    GST_ERROR_OBJECT (this, "Unable to allocate resources for sink buffers");
     return GST_FLOW_ERROR;
   }
 }
