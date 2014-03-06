@@ -57,9 +57,9 @@ GST_STATIC_PAD_TEMPLATE (
   "sink",
   GST_PAD_SINK,
   GST_PAD_ALWAYS,
-  GST_STATIC_CAPS (
-    "video/h264"
-    )
+  GST_STATIC_CAPS ("video/x-h264," 
+      "stream-format=(string) {byte-stream,avc},"
+      "alignment=(string) {au,nal}")
 );
 
 static GstStaticPadTemplate src_template =
@@ -89,7 +89,7 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
   gstomxbase_class = GST_OMX_BASE_CLASS(klass);
 
   gst_element_class_set_details_simple (gstelement_class,
-    "omx_h264dec",
+    "OpenMAX H.264 video decoder",
     "Codec/Decoder/Video",
     "RidgeRun's OMX based H264 decoder",
     "Carlos Gomez <carlos.gomez@ridgerun.com>");
@@ -269,6 +269,8 @@ gst_omx_h264_dec_init_pads (GstOmxBase *base)
   port->format.video.nStride = this->format.width_padded;
   port->format.video.xFramerate = 
     ((guint)((gdouble)this->format.framerate_num)/this->format.framerate_den) << 16;
+  port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+  port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE(this)->handle, OMX_IndexParamPortDefinition, port);
