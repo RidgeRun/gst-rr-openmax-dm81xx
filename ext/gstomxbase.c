@@ -1244,7 +1244,6 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   if (klass->omx_fill_buffer) {
     this->fill_ret = klass->omx_fill_buffer (this, outbuf);
     if (this->fill_ret != GST_FLOW_OK) {
-      error = OMX_ErrorUndefined;
       goto cbfailed;
     }
   }
