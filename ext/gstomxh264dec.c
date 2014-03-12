@@ -21,14 +21,14 @@
  */
 
 /**
- * SECTION:element-omx_h264_dec
+ * SECTION:element-omx_h264dec
  *
- * FIXME:Describe omx_h264_dec here.
+ * Gstreamer H.264/AVC video decoder using OpenMAX IL
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m fakesrc ! omx_h264_dec ! fakesink silent=TRUE
+ * gst-launch -v -m fakesrc ! omx_h264dec ! fakesink silent=TRUE
  * ]|
  * </refsect2>
  */
@@ -141,9 +141,11 @@ gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps)
 {
   GstOmxH264Dec *this = GST_OMX_H264_DEC(GST_OBJECT_PARENT(pad));
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
-  GstStructure *srcstructure;
-  GstCaps *allowedcaps;
-  GstCaps *newcaps;
+  GstStructure *srcstructure = NULL;
+  GstCaps *allowedcaps = NULL;
+  GstCaps *newcaps = NULL;
+  GValue stride = { 0, };
+  GValue interlaced = { 0, };
 
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
@@ -173,6 +175,8 @@ gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps)
 
   /* This is always fixed */
   this->format.format = GST_VIDEO_FORMAT_NV12;
+  /* The right value is set with interlaced flag on output omx buffers */
+  this->format.interlaced =FALSE;
 
   this->format.size_padded = 
     this->format.width_padded*(this->format.height_padded + 4*PADY)*1.5;
@@ -204,7 +208,15 @@ gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps)
   gst_structure_get_int (srcstructure, "height", &this->format.height);
   gst_structure_get_fraction (srcstructure, "framerate", &this->format.framerate_num,
       &this->format.framerate_den);
-  
+
+  g_value_init (&stride, G_TYPE_INT);
+  g_value_set_int (&stride, this->format.width_padded);
+  gst_structure_set_value (srcstructure, "stride", &stride);
+
+  g_value_init (&interlaced, G_TYPE_BOOLEAN);
+  g_value_set_boolean (&interlaced, this->format.interlaced);
+  gst_structure_set_value (srcstructure, "interlaced", &interlaced);
+
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
 
   if (!gst_pad_set_caps (this->srcpad, newcaps))
@@ -229,9 +241,9 @@ static OMX_ERRORTYPE
 gst_omx_h264_dec_init_pads (GstOmxBase *base)
 {
   GstOmxH264Dec *this = GST_OMX_H264_DEC(base);
-  OMX_PARAM_PORTDEFINITIONTYPE *port;
+  OMX_PARAM_PORTDEFINITIONTYPE *port = NULL;
   OMX_ERRORTYPE error = OMX_ErrorNone;
-  gchar *portname;
+  gchar *portname = NULL;
 
   GST_DEBUG_OBJECT(this, "Initializing sink pad port");
   port = GST_OMX_PAD_PORT(GST_OMX_PAD(this->sinkpad));
@@ -239,7 +251,7 @@ gst_omx_h264_dec_init_pads (GstOmxBase *base)
   port->nPortIndex = 0;
   port->eDir = OMX_DirInput;
   port->nBufferCountActual = 4;
-  port->nBufferSize = this->format.size_padded;
+  port->nBufferSize = this->format.size;
   port->format.video.cMIMEType = "H264";
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
@@ -270,7 +282,6 @@ gst_omx_h264_dec_init_pads (GstOmxBase *base)
   port->format.video.xFramerate = 
     ((guint)((gdouble)this->format.framerate_num)/this->format.framerate_den) << 16;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
-  port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE(this)->handle, OMX_IndexParamPortDefinition, port);
@@ -300,6 +311,8 @@ gst_omx_h264_dec_fill_callback (GstOmxBase *base, OMX_BUFFERHEADERTYPE *outbuf)
   GstBuffer *buffer = NULL;
   GstCaps *caps = NULL;
   GstOmxBufferData *bufdata = (GstOmxBufferData *)outbuf->pAppPrivate;
+  GstStructure *structure = NULL;
+  gboolean i = FALSE;
 
   GST_LOG_OBJECT (this,"H264 Fill buffer callback");
 
@@ -311,6 +324,18 @@ gst_omx_h264_dec_fill_callback (GstOmxBase *base, OMX_BUFFERHEADERTYPE *outbuf)
   if (!buffer)
     goto noalloc;
 
+  i = (0 != (outbuf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
+  if (i != this->format.interlaced){
+    this->format.interlaced = i;
+    caps = gst_caps_copy(GST_PAD_CAPS(this->srcpad));
+    structure = gst_caps_get_structure (caps, 0);
+    if (structure) {
+      gst_structure_set (structure,
+			 "interlaced", G_TYPE_BOOLEAN, this->format.interlaced, (char *)NULL);
+    }
+    gst_pad_set_caps(this->srcpad, caps);
+  }
+
   GST_BUFFER_SIZE(buffer) = this->format.size_padded;
   GST_BUFFER_CAPS(buffer) = caps;
   GST_BUFFER_DATA(buffer) = outbuf->pBuffer;
@@ -318,7 +343,6 @@ gst_omx_h264_dec_fill_callback (GstOmxBase *base, OMX_BUFFERHEADERTYPE *outbuf)
   GST_BUFFER_FREE_FUNC(buffer) = gst_omx_base_release_buffer;
 
   /* Make buffer fields GStreamer friendly */
-  GST_BUFFER_SIZE(buffer) = this->format.size;
   GST_BUFFER_TIMESTAMP(buffer) = outbuf->nTimeStamp;
   GST_BUFFER_DURATION(buffer) = 
     1e9*this->format.framerate_den/this->format.framerate_num;
@@ -329,6 +353,7 @@ gst_omx_h264_dec_fill_callback (GstOmxBase *base, OMX_BUFFERHEADERTYPE *outbuf)
 
   GST_LOG_OBJECT (this,"Pushing buffer %p->%p to %s:%s", 
 		  outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME(this->srcpad));
+
   ret = gst_pad_push (this->srcpad, buffer);
   if (GST_FLOW_OK != ret)
     goto nopush;
