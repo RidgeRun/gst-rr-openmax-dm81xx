@@ -61,6 +61,8 @@ struct _GstOmxBase
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
+  
+  GstFlowReturn fill_ret;
 };
 
 struct _GstOmxBaseClass
@@ -69,12 +71,12 @@ struct _GstOmxBaseClass
 
   gchar *handle_name;
 
-    OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
+  OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
       guint32, gpointer);
-    OMX_ERRORTYPE (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-    OMX_ERRORTYPE (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-    OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
-    gboolean (*parse_caps) (GstPad *, GstCaps *);
+  GstFlowReturn (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+  GstFlowReturn (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+  OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
+  gboolean (*parse_caps) (GstPad *, GstCaps *);
   GstCaps *(*parse_buffer) (GstOmxBase *, GstBuffer *);
 
 };

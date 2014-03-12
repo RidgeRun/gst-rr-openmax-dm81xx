@@ -557,7 +557,7 @@ nostartstop:
   }
 nopads:
   {
-    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s", 
+    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s",
         gst_omx_error_to_str (error));
     return FALSE;
   }
@@ -569,7 +569,7 @@ noinitports:
   }
 starthandle:
   {
-    GST_ERROR_OBJECT (this, "Unable to set handle to Idle: %s", 
+    GST_ERROR_OBJECT (this, "Unable to set handle to Idle: %s",
         gst_omx_error_to_str (error));
     return FALSE;
   }
@@ -1229,7 +1229,7 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   if (busy)
     goto illegal;
 
-  if (flushing)
+  if (flushing || (this->fill_ret != GST_FLOW_OK))
     goto flushing;
 
 
@@ -1242,9 +1242,11 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
 
   if (klass->omx_fill_buffer) {
-    error = klass->omx_fill_buffer (this, outbuf);
-    if (GST_OMX_FAIL (error))
+    this->fill_ret = klass->omx_fill_buffer (this, outbuf);
+    if (this->fill_ret != GST_FLOW_OK) {
+      error = OMX_ErrorUndefined;
       goto cbfailed;
+    }
   }
 
   return error;
@@ -1268,8 +1270,9 @@ flushing:
 
 cbfailed:
   {
-    GST_ERROR_OBJECT (this, "Subclass failed to process buffer %d: %s",
-        bufdata->id, gst_omx_error_to_str (error));
+    GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
+        ("Subclass failed to process buffer (id:%d): %s",
+            bufdata->id, gst_flow_get_name (this->fill_ret)), (NULL));
     gst_omx_buf_tab_return_buffer (bufdata->pad->buffers, outbuf);
 
     g_mutex_lock (&_omx_mutex);
@@ -1311,8 +1314,8 @@ gst_omx_base_empty_callback (OMX_HANDLETYPE handle,
 noreturn:
   {
     GST_ELEMENT_ERROR (this, LIBRARY, ENCODE,
-        ("Unable to return buffer to buftab: %s", gst_omx_error_to_str (error)),
-        (NULL));
+        ("Unable to return buffer to buftab: %s",
+            gst_omx_error_to_str (error)), (NULL));
     buffer->pAppPrivate = NULL;
     return error;
   }
@@ -1489,8 +1492,9 @@ noreturn:
   }
 flushing:
   {
-    GST_DEBUG_OBJECT (this, "Discarded buffer %p->%p due to flushing component",
-        buffer, buffer->pBuffer);
+    GST_DEBUG_OBJECT (this,
+        "Discarded buffer %p->%p due to flushing component", buffer,
+        buffer->pBuffer);
     return;
   }
 nofill:

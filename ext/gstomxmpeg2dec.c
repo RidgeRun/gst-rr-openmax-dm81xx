@@ -73,7 +73,7 @@ static void gst_omx_mpeg2_dec_code_to_aspectratio (guint code, gint * num,
 static void gst_omx_mpeg2_dec_code_to_aspectratio (guint code, gint * num,
     gint * den);
 static OMX_ERRORTYPE gst_omx_mpeg2_dec_init_pads (GstOmxBase * this);
-static OMX_ERRORTYPE gst_omx_mpeg2_dec_fill_callback (GstOmxBase *,
+static GstFlowReturn gst_omx_mpeg2_dec_fill_callback (GstOmxBase *, 
     OMX_BUFFERHEADERTYPE *);
 /* GObject vmethod implementations */
 
@@ -441,12 +441,11 @@ noport:
   }
 }
 
-static OMX_ERRORTYPE
+static GstFlowReturn
 gst_omx_mpeg2_dec_fill_callback (GstOmxBase * base,
     OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxMpeg2Dec *this = GST_OMX_MPEG2_DEC (base);
-  OMX_ERRORTYPE error = OMX_ErrorNone;
   GstFlowReturn ret = GST_FLOW_OK;
   GstBuffer *buffer = NULL;
   GstCaps *caps = NULL;
@@ -482,24 +481,22 @@ gst_omx_mpeg2_dec_fill_callback (GstOmxBase * base,
   if (GST_FLOW_OK != ret)
     goto nopush;
 
-  return error;
+  return ret;
 
 noalloc:
   {
     GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
         ("Unable to allocate buffer to push"), (NULL));
-    error = OMX_ErrorInsufficientResources;
-    return error;
+    return GST_FLOW_ERROR;
   }
 nocaps:
   {
-    GST_ERROR_OBJECT (this, "Caps must be set at this point");
-    error = OMX_ErrorNotReady;
-    return error;
+    GST_ERROR_OBJECT (this, "Unable to provide the requested caps");
+    return GST_FLOW_NOT_NEGOTIATED;
   }
 nopush:
   {
-    GST_DEBUG_OBJECT (this, "Unable to push buffer downstream: %d", ret);
-    return error;
+    GST_ERROR_OBJECT (this, "Unable to push buffer downstream: %d", ret);
+    return ret;
   }
 }

@@ -60,7 +60,7 @@ G_DEFINE_TYPE (GstOmxScaler, gst_omx_scaler, GST_TYPE_OMX_BASE);
 
 static gboolean gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_scaler_init_pads (GstOmxBase * this);
-static OMX_ERRORTYPE gst_omx_scaler_fill_callback (GstOmxBase *,
+static GstFlowReturn gst_omx_scaler_fill_callback (GstOmxBase *,
     OMX_BUFFERHEADERTYPE * buffer);
 static OMX_ERRORTYPE gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
     GstOmxPad *, GstOmxFormat *);
@@ -397,11 +397,10 @@ noenable:
   }
 }
 
-static OMX_ERRORTYPE
+static GstFlowReturn
 gst_omx_scaler_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxScaler *this = GST_OMX_SCALER (base);
-  OMX_ERRORTYPE error = OMX_ErrorNone;
   GstFlowReturn ret = GST_FLOW_OK;
   GstBuffer *buffer = NULL;
   GstCaps *caps = NULL;
@@ -431,25 +430,23 @@ gst_omx_scaler_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
   if (GST_FLOW_OK != ret)
     goto nopush;
 
-  return error;
+  return ret;
 
 noalloc:
   {
     GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
         ("Unable to allocate buffer to push"), (NULL));
-    error = OMX_ErrorInsufficientResources;
-    return error;
+    return GST_FLOW_ERROR;
   }
 nocaps:
   {
     GST_ERROR_OBJECT (this, "Unable to provide the requested caps");
-    error = OMX_ErrorNotReady;
-    return error;
+    return GST_FLOW_NOT_NEGOTIATED;
   }
 nopush:
   {
     GST_ERROR_OBJECT (this, "Unable to push buffer downstream: %d", ret);
-    return error;
+    return ret;
   }
 }
 
