@@ -449,7 +449,8 @@ nostart:
   {
     GST_ERROR_OBJECT (this, "Unable to start component: %s",
         gst_omx_error_to_str (error));
-    return FALSE;
+    gst_buffer_unref (buf);
+    return GST_FLOW_ERROR;
   }
 notfound:
   {
@@ -556,25 +557,27 @@ nostartstop:
   }
 nopads:
   {
-    GST_ERROR_OBJECT (this, "Unable to initializate ports");
-    return error;
+    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s", 
+        gst_omx_error_to_str (error));
+    return FALSE;
   }
 noinitports:
   {
     GST_ERROR_OBJECT (this, "%s doesn't have an init ports function",
         GST_OBJECT_NAME (this));
-    error = OMX_ErrorNotImplemented;
-    return error;
+    return FALSE;
   }
 starthandle:
   {
-    GST_ERROR_OBJECT (this, "Unable to set handle to Idle");
-    return error;
+    GST_ERROR_OBJECT (this, "Unable to set handle to Idle: %s", 
+        gst_omx_error_to_str (error));
+    return FALSE;
   }
 noalloc:
   {
-    GST_ERROR_OBJECT (this, "Unable to allocate resources for src buffers");
-    return error;
+    GST_ERROR_OBJECT (this, "Unable to allocate resources for src buffers: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
   }
 }
 
