@@ -31,6 +31,7 @@
 #include "gstomxmpeg2dec.h"
 #include "gstomxh264dec.h"
 #include "gstomxscaler.h"
+#include "gstomxdeiscaler.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -76,6 +77,10 @@ omx_init (GstPlugin * omx)
           GST_TYPE_OMX_SCALER))
     return FALSE;
 
+  if (!gst_element_register (omx, "rromx_deiscaler", GST_RANK_NONE,
+          GST_TYPE_OMX_DEISCALER))
+    return FALSE;
+    
   return TRUE;
 }
 
