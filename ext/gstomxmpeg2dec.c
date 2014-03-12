@@ -22,12 +22,12 @@
 /**
  * SECTION:element-omx_mpeg2_dec
  *
- * FIXME:Describe omx_mpeg2_dec here.
+ * Gstreamer MPEG-2 video decoder using OpenMAX IL
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m fakesrc ! omx_mpeg2_dec ! fakesink silent=TRUE
+ * gst-launch -v -m fakesrc ! omx_mpeg2dec ! fakesink silent=TRUE
  * ]|
  * </refsect2>
  */
@@ -292,6 +292,7 @@ gst_omx_mpeg2_dec_set_caps (GstPad * pad, GstCaps * caps)
   GstStructure *srcstructure;
   GstCaps *allowedcaps;
   GstCaps *newcaps;
+  GValue interlaced = { 0, };
 
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
@@ -320,6 +321,8 @@ gst_omx_mpeg2_dec_set_caps (GstPad * pad, GstCaps * caps)
 
   /* This is always fixed */
   this->format.format = GST_VIDEO_FORMAT_NV12;
+  /* The right value is set with interlaced flag on output omx buffers */
+  this->format.interlaced =FALSE;
 
   this->format.size_padded =
       this->format.width_padded * (this->format.height_padded + 4 * PADY) * 1.5;
@@ -352,6 +355,10 @@ gst_omx_mpeg2_dec_set_caps (GstPad * pad, GstCaps * caps)
   gst_structure_get_int (srcstructure, "height", &this->format.height);
   gst_structure_get_fraction (srcstructure, "framerate",
       &this->format.framerate_num, &this->format.framerate_den);
+
+  g_value_init (&interlaced, G_TYPE_BOOLEAN);
+  g_value_set_boolean (&interlaced, this->format.interlaced);
+  gst_structure_set_value (srcstructure, "interlaced", &interlaced);
 
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
 
@@ -451,6 +458,8 @@ gst_omx_mpeg2_dec_fill_callback (GstOmxBase * base,
   GstBuffer *buffer = NULL;
   GstCaps *caps = NULL;
   GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
+  GstStructure *structure = NULL;
+  gboolean i = FALSE;
 
   GST_LOG_OBJECT (this, "MPEG2 Fill buffer callback");
 
@@ -461,6 +470,18 @@ gst_omx_mpeg2_dec_fill_callback (GstOmxBase * base,
   buffer = gst_buffer_new ();
   if (!buffer)
     goto noalloc;
+
+  i = (0 != (outbuf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
+  if (i != this->format.interlaced){
+    this->format.interlaced = i;
+    caps = gst_caps_copy(GST_PAD_CAPS(this->srcpad));
+    structure = gst_caps_get_structure (caps, 0);
+    if (structure) {
+      gst_structure_set (structure,
+			 "interlaced", G_TYPE_BOOLEAN, this->format.interlaced, (char *)NULL);
+    }
+    gst_pad_set_caps(this->srcpad, caps);
+  }
 
   GST_BUFFER_SIZE (buffer) = this->format.size_padded;
   GST_BUFFER_CAPS (buffer) = caps;

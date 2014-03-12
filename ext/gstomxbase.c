@@ -355,9 +355,9 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *omxbuf;
   gboolean busy;
-  OMX_BUFFERHEADERTYPE *omxpeerbuf;
+  OMX_BUFFERHEADERTYPE *omxpeerbuf = NULL;
   GstOmxPad *omxpad = GST_OMX_PAD (pad);
-  GstOmxBufferData *bufdata;
+  GstOmxBufferData *bufdata = NULL;
   gboolean flushing;
 
   GST_OBJECT_LOCK (this);
@@ -397,7 +397,11 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
   if (GST_OMX_IS_OMX_BUFFER (buf)) {
 
-    omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+    if (buf->parent != NULL) {
+      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf->parent);
+    } else {
+      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+    }
     GST_LOG_OBJECT (this, "Received an OMX buffer %p->%p", omxpeerbuf,
         omxpeerbuf->pBuffer);
 
@@ -418,8 +422,14 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     memcpy (omxbuf->pBuffer, GST_BUFFER_DATA (buf), GST_BUFFER_SIZE (buf));
   }
 
-  omxbuf->nFilledLen = GST_BUFFER_SIZE (buf);
-  omxbuf->nOffset = 0;
+  if (omxpeerbuf != NULL) {
+    omxbuf->nFilledLen = omxpeerbuf->nFilledLen;
+    omxbuf->nOffset = omxpeerbuf->nOffset;
+  }
+  else {
+    omxbuf->nFilledLen = GST_BUFFER_SIZE (buf);
+    omxbuf->nOffset = 0;
+  }
   omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
 
   bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
@@ -441,7 +451,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
 flushing:
   {
-    GST_DEBUG_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
+    GST_DEBUG_OBJECT (this, "Discarding buffer while flushing");
     gst_buffer_unref (buf);
     return GST_FLOW_OK;
   }
@@ -817,7 +827,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   GstBuffer *peerbuf = NULL;
   GList *peerbuffers = NULL;
   guint i;
-  GstOmxBufferData *bufdata;
+  GstOmxBufferData *bufdata = NULL;
   guint32 maxsize;
 
   if (pad->buffers->table != NULL) {
@@ -1411,7 +1421,7 @@ gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
       goto noalloc;
   }
 
-  /* If we are here, buffers where successfully allocated */
+  /* If we are here, buffers were successfully allocated */
   error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
   if (GST_OMX_FAIL (error))
     goto nofreebuf;
