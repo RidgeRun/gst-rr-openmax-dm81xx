@@ -292,6 +292,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->requested_size = 0;
   this->peer_alloc = TRUE;
   this->flushing = FALSE;
+  this->configured = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
 
@@ -507,6 +508,11 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
   GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
+  /* While correcting the interlaced value in caps, the plugin already configured caps 
+     but it has not started, and ports don't need to be initialized again */
+  if (!this->started && this->configured)
+    return TRUE;
+
   if (!klass->parse_caps)
     goto noparsecaps;
 
@@ -546,6 +552,7 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
 
   GST_DEBUG_OBJECT (this, "Caps %s set successfully",
       gst_caps_to_string (caps));
+  this->configured = TRUE;
   return TRUE;
 
 noparsecaps:
@@ -719,6 +726,7 @@ gst_omx_base_stop (GstOmxBase * this)
 
   GST_OBJECT_LOCK (this);
   this->flushing = FALSE;
+  this->configured = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
   GST_OBJECT_UNLOCK (this);
