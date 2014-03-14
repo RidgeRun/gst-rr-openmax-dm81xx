@@ -113,12 +113,14 @@ gst_omx_scaler_init (GstOmxScaler * this)
           (&sink_template), "sink"));
   gst_pad_set_active (this->sinkpad, TRUE);
   gst_omx_base_add_pad (GST_OMX_BASE (this), this->sinkpad);
+  gst_element_add_pad (GST_ELEMENT (this), this->sinkpad);
 
   this->srcpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
   gst_pad_set_active (this->srcpad, TRUE);
   gst_omx_base_add_pad (GST_OMX_BASE (this), this->srcpad);
+  gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
 }
 
 static gboolean

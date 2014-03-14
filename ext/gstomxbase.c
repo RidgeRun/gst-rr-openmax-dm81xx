@@ -294,6 +294,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
+  this->pads = NULL;
 
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
@@ -483,6 +484,7 @@ gst_omx_base_finalize (GObject * object)
 
   GST_INFO_OBJECT (this, "Finalizing %s", GST_OBJECT_NAME (this));
 
+  g_list_free_full (this->pads, gst_object_unref);
   gst_omx_base_free_omx (this);
 
   /* Chain up to the parent class */
@@ -767,43 +769,25 @@ gst_omx_base_for_each_pad (GstOmxBase * this, GstOmxBasePadFunc func,
     GstPadDirection direction, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
-  GstIterator *iter;
   GstPad *pad;
-  gboolean done;
+  GList *l;
 
-  if ((iter = gst_element_iterate_pads (GST_ELEMENT (this)))) {
-    done = FALSE;
-    while (!done) {
-      switch (gst_iterator_next (iter, (gpointer) & pad)) {
-        case GST_ITERATOR_OK:
-          if ((direction == GST_PAD_UNKNOWN)
-              || (direction == GST_PAD_DIRECTION (pad))) {
-            error = func (this, GST_OMX_PAD (pad), data);
-            if (GST_OMX_FAIL (error))
-              goto failed;
-          }
-          gst_object_unref (pad);
-          break;
-        case GST_ITERATOR_RESYNC:
-          gst_iterator_resync (iter);
-          break;
-        case GST_ITERATOR_ERROR:
-        case GST_ITERATOR_DONE:
-          done = TRUE;
-          break;
-      } // switch
-    } //while
-  } //if
+  for (l = this->pads; l; l = l->next) {
+    pad = l->data;
+    if ((direction == GST_PAD_UNKNOWN)
+        || (direction == GST_PAD_DIRECTION (pad))) {
+      error = func (this, GST_OMX_PAD (pad), data);
+      if (GST_OMX_FAIL (error))
+        goto failed;
+    }
+  }
 
-  gst_iterator_free (iter);
   return error;
 
 failed:
   {
     GST_ERROR_OBJECT (this, "Iterator failed on pad: %s:%s",
         GST_DEBUG_PAD_NAME (pad));
-    gst_object_unref (pad);
-    gst_iterator_free (iter);
     return error;
   }
 }
@@ -1332,7 +1316,10 @@ gst_omx_base_add_pad (GstOmxBase * this, GstPad * pad)
     gst_pad_set_bufferalloc_function (pad, gst_omx_base_alloc_buffer);
   }
 
-  return gst_element_add_pad (GST_ELEMENT (this), pad);
+  gst_object_ref (pad);
+  this->pads = g_list_append (this->pads, pad);
+
+  return TRUE;
 }
 
 

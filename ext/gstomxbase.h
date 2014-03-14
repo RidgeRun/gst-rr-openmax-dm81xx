@@ -63,6 +63,8 @@ struct _GstOmxBase
   GCond waitcond;
   
   GstFlowReturn fill_ret;
+  
+  GList *pads;
 };
 
 struct _GstOmxBaseClass
