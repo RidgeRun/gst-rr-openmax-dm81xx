@@ -55,7 +55,7 @@ static GstStaticPadTemplate src0_template = GST_STATIC_PAD_TEMPLATE ("src_00",
     GST_STATIC_CAPS ("video/x-raw-yuv,"
         "format=(fourcc)YUY2,"
         "width=[16,1920]," "height=[16,1920],"
-        "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced={true,false}")
+        "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced=false")
     );
 
 static GstStaticPadTemplate src1_template = GST_STATIC_PAD_TEMPLATE ("src_01",
@@ -64,7 +64,7 @@ static GstStaticPadTemplate src1_template = GST_STATIC_PAD_TEMPLATE ("src_01",
     GST_STATIC_CAPS ("video/x-raw-yuv,"
         "format=(fourcc)NV12,"
         "width=[16,1920]," "height=[16,1920],"
-        "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced={true,false}")
+        "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced=false")
     );
 
 #define gst_omx_deiscaler_parent_class parent_class
@@ -155,7 +155,7 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
   while (l) {
     templ = l->data;
 
-    GST_DEBUG_OBJECT ("Adding pad %s", templ->name_template);
+    GST_DEBUG_OBJECT (this, "Adding pad %s", templ->name_template);
 
     pad = GST_PAD (gst_omx_pad_new_from_template (templ, templ->name_template));
     gst_omx_base_add_pad (GST_OMX_BASE (this), pad);
@@ -267,6 +267,7 @@ static gboolean
 gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
 {
   GstOmxDeiscaler *this = GST_OMX_DEISCALER (GST_OBJECT_PARENT (pad));
+  GstOmxBase *base = GST_OMX_BASE (this);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
   GstStructure *srcstructure;
   GstCaps *allowedcaps;
@@ -289,6 +290,9 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
     goto invalidcaps;
   }
   this->in_format.height_padded = this->in_format.height;
+
+  if (!gst_structure_get_boolean (structure, "interlaced", &base->interlaced))
+    base->interlaced = TRUE;
 
   GST_LOG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
@@ -419,6 +423,9 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   GList *l, *f;
   gint i;
 
+  if (base->interlaced)
+    this->in_format.height = this->in_format.height >> 1;
+
   GST_OMX_INIT_STRUCT (&subsampling_factor, OMX_CONFIG_SUBSAMPLING_FACTOR);
   subsampling_factor.nSubSamplingFactor = 1;
   g_mutex_lock (&_omx_mutex);
@@ -479,7 +486,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   port->nBufferSize = this->in_format.size_padded;
   port->nBufferAlignment = 0;
   port->bBuffersContiguous = 0;
-  port->nBufferCountActual = 6;
+  port->nBufferCountActual = 12;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (base->handle, OMX_IndexParamPortDefinition, port);
@@ -565,7 +572,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   GST_OMX_INIT_STRUCT (&enable, OMX_CONFIG_ALG_ENABLE);
   enable.nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX;
   enable.nChId = 0;
-  enable.bAlgBypass = 1;
+  enable.bAlgBypass = base->interlaced ? 0 : 1;
 
   g_mutex_lock (&_omx_mutex);
   error =
@@ -716,8 +723,8 @@ gst_omx_deiscaler_sink_dynamic_configuration (GstOmxDeiscaler * this,
   resolution.Frm1Pitch = 0;
   resolution.FrmStartX = 0;
   resolution.FrmStartY = 0;
-  resolution.FrmCropWidth = format->width;      // Adjust to width
-  resolution.FrmCropHeight = format->height;    // Adjust to height
+  resolution.FrmCropWidth = format->width;
+  resolution.FrmCropHeight = format->height;
 
   resolution.eDir = OMX_DirInput;
   resolution.nChId = 0;

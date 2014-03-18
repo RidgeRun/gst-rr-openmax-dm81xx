@@ -52,11 +52,13 @@ struct _GstOmxBase
   OMX_CALLBACKTYPE *callbacks;
 
   guint32 requested_size;
+  guint32 field_offset;
 
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
   gboolean first_buffer;
+  gboolean interlaced;
 
   OMX_STATETYPE state;
   GMutex waitmutex;

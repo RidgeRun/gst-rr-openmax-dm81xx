@@ -294,8 +294,10 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
-  this->pads = NULL;
+  this->interlaced = FALSE;
 
+  this->pads = NULL;
+  this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
@@ -370,15 +372,9 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
   if (!this->started) {
     if (!omxpad->buffers->table && GST_OMX_IS_OMX_BUFFER (buf)) {
-      GstOmxBufferData *peerbufdata;
-      GstOmxPad *peerpad = NULL;
-
-      GST_INFO_OBJECT (this, "Getting omx peer buftab to share");
+      GST_INFO_OBJECT (this, "Sharing upstream peer buffers");
       omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
-      peerbufdata = (GstOmxBufferData *) omxpeerbuf->pAppPrivate;
-      peerpad = peerbufdata->pad;
-
-      gst_omx_base_alloc_buffers (this, omxpad, peerpad);
+      gst_omx_base_alloc_buffers (this, omxpad, omxpeerbuf);
     }
 
     GST_INFO_OBJECT (this, "Starting component");
@@ -426,6 +422,10 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
   bufdata->buffer = buf;
 
+  if (this->interlaced)
+    omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE;
+
+
   GST_LOG_OBJECT (this, "Emptying buffer %d %p %p->%p", bufdata->id, bufdata,
       omxbuf, omxbuf->pBuffer);
   g_mutex_lock (&_omx_mutex);
@@ -434,6 +434,37 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   if (GST_OMX_FAIL (error))
     goto noempty;
 
+
+  if (this->interlaced && GST_OMX_IS_OMX_BUFFER (buf)) {
+    OMX_BUFFERHEADERTYPE tmpbuf;
+    tmpbuf.pBuffer = omxbuf->pBuffer + this->field_offset;
+    GST_LOG_OBJECT (this, "Getting bottom field buffer  %p->%p", &tmpbuf,
+        tmpbuf.pBuffer);
+
+    error =
+        gst_omx_buf_tab_find_buffer (omxpad->buffers, &tmpbuf, &omxbuf, &busy);
+    if (GST_OMX_FAIL (error))
+      goto notfound;
+    gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
+
+    /* FilledLen calculated to achive the sencond field chroma position 
+     * to be at 2/3 of the buffer size */
+    omxbuf->nFilledLen = (GST_BUFFER_SIZE (buf) * 3) >> 2;      /*TODO: Need to add the offsets? */
+    omxbuf->nOffset = 0;
+    omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
+    omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
+        OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE_BOTTOM;
+    bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
+    bufdata->buffer = gst_buffer_ref (buf);
+
+    GST_LOG_OBJECT (this, "Emptying buffer %d %p %p->%p", bufdata->id, bufdata,
+        omxbuf, omxbuf->pBuffer);
+    g_mutex_lock (&_omx_mutex);
+    error = this->component->EmptyThisBuffer (this->handle, omxbuf);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto noempty;
+  }
   /* g_mutex_lock (&this->waitmutex); */
   /* g_cond_wait (&this->waitcond, &this->waitmutex); */
   /* g_mutex_unlock (&this->waitmutex); */
@@ -442,7 +473,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
 flushing:
   {
-    GST_DEBUG_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
+    GST_ERROR_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
     gst_buffer_unref (buf);
     return GST_FLOW_OK;
   }
@@ -803,6 +834,9 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   guint i;
   GstOmxBufferData *bufdata;
   guint32 maxsize;
+  gboolean divided_buffers = FALSE;
+  gboolean top_field = TRUE;
+  gpointer bufferpointer = NULL;
 
   if (pad->buffers->table != NULL) {
     GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
@@ -814,8 +848,22 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       GST_DEBUG_PAD_NAME (GST_PAD (pad)));
 
   if (data) {
-    GstOmxPad *peerpad = peerpad = GST_OMX_PAD (data);
-    if (pad->port->nBufferCountActual > peerpad->port->nBufferCountActual) {
+    GstOmxBufferData *peerbufdata = NULL;
+    GstOmxPad *peerpad = NULL;
+    guint numbufs = pad->port->nBufferCountActual;
+
+    omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) data;
+    peerbufdata = (GstOmxBufferData *) omxpeerbuffer->pAppPrivate;
+    peerpad = peerbufdata->pad;
+
+    if (this->interlaced) {
+      divided_buffers = TRUE;
+      numbufs = numbufs >> 1;
+      this->field_offset =
+          (omxpeerbuffer->nFilledLen /*+omxpeerbuffer->nOffset */ ) / 3;
+    }
+
+    if (numbufs > peerpad->port->nBufferCountActual) {
       error = OMX_ErrorInsufficientResources;
       goto nouse;
     }
@@ -823,11 +871,6 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   }
 
   for (i = 0; i < pad->port->nBufferCountActual; ++i) {
-
-    bufdata = (GstOmxBufferData *) g_malloc (sizeof (GstOmxBufferData));
-    bufdata->pad = pad;
-    bufdata->buffer = NULL;
-    bufdata->id = i;
 
     /* First we try to ask for downstream OMX buffers */
     if (GST_PAD_IS_SRC (pad) && this->peer_alloc) {
@@ -843,10 +886,23 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       } else {
         goto nodownstream;
       }
-    } else if (GST_PAD_IS_SINK (pad) && peerbuffers) {
-      omxpeerbuffer = ((GstOmxBufTabNode *) peerbuffers->data)->buffer;
-      peerbuffers = g_list_next (peerbuffers);
+    } else if (GST_PAD_IS_SINK (pad) && data) {
+      if (top_field) {
+        omxpeerbuffer = ((GstOmxBufTabNode *) peerbuffers->data)->buffer;
+        peerbuffers = g_list_next (peerbuffers);
+        bufferpointer = omxpeerbuffer->pBuffer;
+      } else {
+        bufferpointer = omxpeerbuffer->pBuffer + this->field_offset;
+      }
     }
+
+    if (divided_buffers)
+      top_field = !top_field;
+
+    bufdata = (GstOmxBufferData *) g_malloc (sizeof (GstOmxBufferData));
+    bufdata->pad = pad;
+    bufdata->buffer = NULL;
+    bufdata->id = i;
 
     if (omxpeerbuffer) {
       GST_DEBUG_OBJECT (this, "Received buffer number %u:"
@@ -856,18 +912,15 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       g_mutex_lock (&_omx_mutex);
       error = OMX_UseBuffer (this->handle, &buffer,
           GST_OMX_PAD_PORT (pad)->nPortIndex, bufdata,
-          omxpeerbuffer->nAllocLen /* GST_OMX_PAD_PORT(pad)->nBufferSize */ ,
-          omxpeerbuffer->pBuffer /* g_malloc (omxpeerbuffer->nAllocLen) */ );
+          omxpeerbuffer->nAllocLen, bufferpointer);
       g_mutex_unlock (&_omx_mutex);
       if (GST_OMX_FAIL (error))
         goto nouse;
 
       GST_DEBUG_OBJECT (this, "Saved buffer number %u:"
-          "%p->%p", i, buffer, buffer->pBuffer);
-
+          "%p->%p", i, buffer, bufferpointer);
       /* No upstream buffer received or pad is a sink, allocate our own */
     } else {
-
       maxsize = GST_OMX_PAD_PORT (pad)->nBufferSize > this->requested_size ?
           GST_OMX_PAD_PORT (pad)->nBufferSize : this->requested_size;
 
