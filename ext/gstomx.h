@@ -60,6 +60,7 @@ struct _GstOmxFormat
   GstVideoFormat format;
   guint size;
   guint size_padded;
+  gboolean interlaced;
 };
 
 struct _GstOmxBufferData

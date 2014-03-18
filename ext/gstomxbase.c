@@ -361,7 +361,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   gboolean busy;
   OMX_BUFFERHEADERTYPE *omxpeerbuf = NULL;
   GstOmxPad *omxpad = GST_OMX_PAD (pad);
-  GstOmxBufferData *bufdata;
+  GstOmxBufferData *bufdata = NULL;
   gboolean flushing;
 
   GST_OBJECT_LOCK (this);
@@ -394,7 +394,11 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
   if (GST_OMX_IS_OMX_BUFFER (buf)) {
 
-    omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+    if (buf->parent != NULL) {
+      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf->parent);
+    } else {
+      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+    }
     GST_LOG_OBJECT (this, "Received an OMX buffer %p->%p", omxpeerbuf,
         omxpeerbuf->pBuffer);
 
@@ -415,8 +419,13 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     memcpy (omxbuf->pBuffer, GST_BUFFER_DATA (buf), GST_BUFFER_SIZE (buf));
   }
 
-  omxbuf->nFilledLen = GST_BUFFER_SIZE (buf);
-  omxbuf->nOffset = 0;
+  if (omxpeerbuf != NULL) {
+    omxbuf->nFilledLen = omxpeerbuf->nFilledLen;
+    omxbuf->nOffset = omxpeerbuf->nOffset;
+  } else {
+    omxbuf->nFilledLen = GST_BUFFER_SIZE (buf);
+    omxbuf->nOffset = 0;
+  }
   omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
 
   bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
@@ -522,6 +531,53 @@ gst_omx_base_finalize (GObject * object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+static gboolean
+gst_omx_base_check_caps (GstPad * pad, GstCaps * newcaps)
+{
+  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstCaps *caps = NULL;
+  GstStructure *structure = NULL;
+  GstStructure *newstructure = NULL;
+  gint width = 0, height = 0;
+  gint newwidth = 0, newheight = 0;
+
+  GST_LOG_OBJECT (this, "Check changes on new caps");
+
+  caps = gst_pad_get_negotiated_caps (pad);
+  if (!caps)
+    goto nocaps;
+
+  structure = gst_caps_get_structure (caps, 0);
+  newstructure = gst_caps_get_structure (newcaps, 0);
+
+  gst_structure_get_int (structure, "width", &width);
+  gst_structure_get_int (structure, "height", &height);
+  gst_structure_get_int (newstructure, "width", &newwidth);
+  gst_structure_get_int (newstructure, "height", &newheight);
+
+  if (width != newwidth || height != newheight)
+    goto initializeports;
+  else
+    goto notinitializeports;
+
+nocaps:
+  {
+    GST_DEBUG_OBJECT (this, "Caps are not negotiated yet");
+    return TRUE;
+  }
+initializeports:
+  {
+    GST_DEBUG_OBJECT (this, "There is a resolution change, initializing ports");
+    return TRUE;
+  }
+notinitializeports:
+  {
+    GST_DEBUG_OBJECT (this,
+        "For new caps it's not necessary to initialize ports");
+    return FALSE;
+  }
+}
+
 /* vmethod implementations */
 static gboolean
 gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
@@ -533,11 +589,14 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
   if (!klass->parse_caps)
     goto noparsecaps;
 
-  GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
-      GST_DEBUG_PAD_NAME (pad));
   if (!klass->parse_caps (pad, caps))
     goto capsinvalid;
 
+  if (!gst_omx_base_check_caps (pad, caps))
+    goto noresolutionchange;
+
+  GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
+      GST_DEBUG_PAD_NAME (pad));
   if (OMX_StateLoaded < this->state) {
     GST_INFO_OBJECT (this, "Resetting component");
     error = gst_omx_base_stop (this);
@@ -556,6 +615,12 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
       gst_caps_to_string (caps));
   return TRUE;
 
+noresolutionchange:
+  {
+    GST_DEBUG_OBJECT (this,
+        "Resolution not changed, ports not need to be reinitialized");
+    return TRUE;
+  }
 noparsecaps:
   {
     GST_ERROR_OBJECT (this, "%s doesn't have a parse caps function",
@@ -923,6 +988,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   gboolean divided_buffers = FALSE;
   gboolean top_field = TRUE;
   gpointer pbuffer = NULL;
+
 
   if (pad->buffers->table != NULL) {
     GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
@@ -1509,7 +1575,7 @@ gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
       goto nostart;
   }
 
-  /* If we are here, buffers where successfully allocated */
+  /* If we are here, buffers were successfully allocated */
   error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
   if (GST_OMX_FAIL (error))
     goto nofreebuf;

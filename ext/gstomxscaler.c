@@ -139,14 +139,19 @@ gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps)
     this->in_format.width = -1;
     goto invalidcaps;
   }
-  this->in_format.width_padded = GST_OMX_ALIGN (this->in_format.width, 16);
+
+  GST_DEBUG_OBJECT (this, "Reading stride");
+  if (!gst_structure_get_int (structure, "stride",
+          &this->in_format.width_padded)) {
+    this->in_format.width_padded = GST_OMX_ALIGN (this->in_format.width, 16);
+  }
 
   GST_DEBUG_OBJECT (this, "Reading height");
   if (!gst_structure_get_int (structure, "height", &this->in_format.height)) {
     this->in_format.height = -1;
     goto invalidcaps;
   }
-  this->in_format.height_padded = this->in_format.height;
+  this->in_format.height_padded = GST_OMX_ALIGN (this->in_format.height, 16);
 
   GST_DEBUG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
@@ -156,13 +161,19 @@ gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps)
     goto invalidcaps;
   }
 
+  GST_DEBUG_OBJECT (this, "Reading interlaced");
+  if (!gst_structure_get_int (structure, "interlaced",
+          &this->in_format.interlaced)) {
+    this->in_format.interlaced = FALSE;
+  }
+
   /* This is always fixed */
   this->in_format.format = GST_VIDEO_FORMAT_NV12;
 
   this->in_format.size = gst_video_format_get_size (this->in_format.format,
       this->in_format.width, this->in_format.height);
   this->in_format.size_padded =
-      this->in_format.width_padded * this->in_format.height * 1.5;
+      this->in_format.width_padded * this->in_format.height_padded * 1.5;
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
@@ -186,7 +197,8 @@ gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps)
       this->in_format.width);
   gst_structure_fixate_field_nearest_int (srcstructure, "height",
       this->in_format.height);
-  gst_structure_fixate_field_boolean (srcstructure, "interlaced", TRUE);
+  gst_structure_fixate_field_boolean (srcstructure, "interlaced",
+      this->in_format.interlaced);
 
   this->out_format.format = GST_VIDEO_FORMAT_YUY2;
 
@@ -282,7 +294,7 @@ gst_omx_scaler_init_pads (GstOmxBase * base)
   port->format.video.nStride = this->in_format.width_padded;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
 
-  port->nBufferSize = this->in_format.size_padded * 2;
+  port->nBufferSize = this->in_format.size_padded;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (base->handle, OMX_IndexParamPortDefinition, port);
@@ -473,10 +485,10 @@ gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
   resolution.Frm1Width = 0;
   resolution.Frm1Height = 0;
   resolution.Frm1Pitch = 0;
-  resolution.FrmStartX = 0;
-  resolution.FrmStartY = 0;
-  resolution.FrmCropWidth = 0;  // Adjust to width
-  resolution.FrmCropHeight = 0; // Adjust to height
+  resolution.FrmStartX = port->eDir == OMX_DirInput ? 0 : 0;
+  resolution.FrmStartY = port->eDir == OMX_DirInput ? 0 : 0;
+  resolution.FrmCropWidth = port->eDir == OMX_DirInput ? 0 : 0; // Adjust to width
+  resolution.FrmCropHeight = port->eDir == OMX_DirInput ? 0 : 0;        // Adjust to height
 
   resolution.eDir = port->eDir;
   resolution.nChId = 0;
