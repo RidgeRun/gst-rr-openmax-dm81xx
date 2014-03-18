@@ -1431,11 +1431,6 @@ cbfailed:
     GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
         ("Subclass failed to process buffer (id:%d): %s",
             bufdata->id, gst_flow_get_name (this->fill_ret)), (NULL));
-    gst_omx_buf_tab_return_buffer (bufdata->pad->buffers, outbuf);
-
-    g_mutex_lock (&_omx_mutex);
-    this->component->FillThisBuffer (this->handle, outbuf);
-    g_mutex_unlock (&_omx_mutex);
 
     return error;
   }
