@@ -812,19 +812,117 @@ failed:
 }
 
 static OMX_ERRORTYPE
+gst_omx_base_peer_alloc_buffer (GstOmxBase * this, GstOmxPad * pad,
+    gpointer * pbuffer, guint32 * size)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
+
+  GstBuffer *peerbuf = NULL;
+  GstFlowReturn ret;
+
+  ret =
+      gst_pad_alloc_buffer (GST_PAD (pad), 0,
+      GST_OMX_PAD_PORT (pad)->nBufferSize,
+      gst_pad_get_negotiated_caps (GST_PAD (pad)), &peerbuf);
+
+  if (GST_FLOW_OK != ret)
+    goto nodownstream;
+
+  if (GST_OMX_IS_OMX_BUFFER (peerbuf)) {
+    omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_DATA (peerbuf);
+    *pbuffer = omxpeerbuffer->pBuffer;
+    *size = omxpeerbuffer->nAllocLen;
+  } else {
+    pbuffer = NULL;
+    *size = 0;
+  }
+  gst_buffer_unref (peerbuf);
+
+  return error;
+
+nodownstream:
+  {
+    GST_ERROR_OBJECT (this, "Downstream element was unable to provide buffers");
+    error = OMX_ErrorInsufficientResources;
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_use_buffer (GstOmxBase * this, GList ** bufferlist,
+    gpointer * pbuffer, guint32 * size)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
+  GList *node;
+  if (!bufferlist)
+    goto nobuffer;
+
+  node = *bufferlist;
+  omxpeerbuffer = ((GstOmxBufTabNode *) node->data)->buffer;
+  *bufferlist = g_list_next (node);
+  *pbuffer = omxpeerbuffer->pBuffer;
+  *size = omxpeerbuffer->nAllocLen;
+
+  GST_LOG_OBJECT (this, "Using buffer %p->%p", omxpeerbuffer, pbuffer);
+  return error;
+
+nobuffer:
+  {
+    GST_ERROR_OBJECT (this, "No buffer left on the list");
+    error = OMX_ErrorInsufficientResources;
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
+    GList ** bufferlist, OMX_BUFFERHEADERTYPE * omxpeerbuffer)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBufferData *peerbufdata = NULL;
+  GstOmxPad *peerpad = NULL;
+  guint numbufs = pad->port->nBufferCountActual;
+
+  peerbufdata = (GstOmxBufferData *) omxpeerbuffer->pAppPrivate;
+  peerpad = peerbufdata->pad;
+
+  if (this->interlaced) {
+    numbufs = numbufs >> 1;
+    this->field_offset =
+        (omxpeerbuffer->nFilledLen /*+omxpeerbuffer->nOffset */ ) / 3;
+  }
+
+  if (numbufs > peerpad->port->nBufferCountActual) {
+    error = OMX_ErrorInsufficientResources;
+    goto nouse;
+  }
+  *bufferlist = peerpad->buffers->table;
+
+  return error;
+
+nouse:
+  {
+    GST_ERROR_OBJECT (this,
+        "Can't share buffers, not enough buffers provided by the peer %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
 gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *buffer = NULL;
-  OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
-  GstBuffer *peerbuf = NULL;
   GList *peerbuffers = NULL;
   guint i;
   GstOmxBufferData *bufdata;
-  guint32 maxsize;
+  guint32 maxsize, size;
   gboolean divided_buffers = FALSE;
   gboolean top_field = TRUE;
-  gpointer bufferpointer = NULL;
+  gpointer pbuffer = NULL;
 
   if (pad->buffers->table != NULL) {
     GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
@@ -832,57 +930,35 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     return error;
   }
 
+  if (data) {
+    OMX_BUFFERHEADERTYPE *omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) data;
+    error =
+        gst_omx_base_init_use_buffer (this, pad, &peerbuffers, omxpeerbuffer);
+    if (error != OMX_ErrorNone)
+      goto noalloc;
+  }
+
+  if (this->interlaced)
+    divided_buffers = TRUE;
+
   GST_DEBUG_OBJECT (this, "Allocating buffers for %s:%s",
       GST_DEBUG_PAD_NAME (GST_PAD (pad)));
-
-  if (data) {
-    GstOmxBufferData *peerbufdata = NULL;
-    GstOmxPad *peerpad = NULL;
-    guint numbufs = pad->port->nBufferCountActual;
-
-    omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) data;
-    peerbufdata = (GstOmxBufferData *) omxpeerbuffer->pAppPrivate;
-    peerpad = peerbufdata->pad;
-
-    if (this->interlaced) {
-      divided_buffers = TRUE;
-      numbufs = numbufs >> 1;
-      this->field_offset =
-          (omxpeerbuffer->nFilledLen /*+omxpeerbuffer->nOffset */ ) / 3;
-    }
-
-    if (numbufs > peerpad->port->nBufferCountActual) {
-      error = OMX_ErrorInsufficientResources;
-      goto nouse;
-    }
-    peerbuffers = peerpad->buffers->table;
-  }
 
   for (i = 0; i < pad->port->nBufferCountActual; ++i) {
 
     /* First we try to ask for downstream OMX buffers */
     if (GST_PAD_IS_SRC (pad) && this->peer_alloc) {
-      if (GST_FLOW_OK == gst_pad_alloc_buffer
-          (GST_PAD (pad), 0, GST_OMX_PAD_PORT (pad)->nBufferSize,
-              gst_pad_get_negotiated_caps (GST_PAD (pad)), &peerbuf)) {
-
-        if (GST_OMX_IS_OMX_BUFFER (peerbuf)) {
-          omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_DATA (peerbuf);
-        }
-        gst_buffer_unref (peerbuf);
-
-      } else {
-        goto nodownstream;
-      }
+      error = gst_omx_base_peer_alloc_buffer (this, pad, &pbuffer, &size);
     } else if (GST_PAD_IS_SINK (pad) && data) {
       if (top_field) {
-        omxpeerbuffer = ((GstOmxBufTabNode *) peerbuffers->data)->buffer;
-        peerbuffers = g_list_next (peerbuffers);
-        bufferpointer = omxpeerbuffer->pBuffer;
+        error = gst_omx_base_use_buffer (this, &peerbuffers, &pbuffer, &size);
       } else {
-        bufferpointer = omxpeerbuffer->pBuffer + this->field_offset;
+        pbuffer = pbuffer + this->field_offset;
       }
     }
+
+    if (error != OMX_ErrorNone)
+      goto noalloc;
 
     if (divided_buffers)
       top_field = !top_field;
@@ -892,21 +968,19 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     bufdata->buffer = NULL;
     bufdata->id = i;
 
-    if (omxpeerbuffer) {
+    if (pbuffer) {
       GST_DEBUG_OBJECT (this, "Received buffer number %u:"
-          "%p of size %d", i, omxpeerbuffer->pBuffer,
-          (int) omxpeerbuffer->nAllocLen);
+          "%p of size %d", i, pbuffer, size);
 
       g_mutex_lock (&_omx_mutex);
       error = OMX_UseBuffer (this->handle, &buffer,
-          GST_OMX_PAD_PORT (pad)->nPortIndex, bufdata,
-          omxpeerbuffer->nAllocLen, bufferpointer);
+          GST_OMX_PAD_PORT (pad)->nPortIndex, bufdata, size, pbuffer);
       g_mutex_unlock (&_omx_mutex);
       if (GST_OMX_FAIL (error))
         goto nouse;
 
       GST_DEBUG_OBJECT (this, "Saved buffer number %u:"
-          "%p->%p", i, buffer, bufferpointer);
+          "%p->%p", i, buffer, pbuffer);
       /* No upstream buffer received or pad is a sink, allocate our own */
     } else {
       maxsize = GST_OMX_PAD_PORT (pad)->nBufferSize > this->requested_size ?
@@ -929,13 +1003,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
 
   return error;
 
-nodownstream:
-  {
-    GST_ERROR_OBJECT (this, "Downstream element was unable to provide buffers");
-    g_free (bufdata);
-    error = OMX_ErrorInsufficientResources;
-    return error;
-  }
+
 nouse:
   {
     GST_ERROR_OBJECT (this, "Unable to use buffer provided by downstream: %s",
