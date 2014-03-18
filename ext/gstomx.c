@@ -70,17 +70,17 @@ omx_init (GstPlugin * omx)
     return FALSE;
 
   if (!gst_element_register (omx, "omx_h264dec", GST_RANK_NONE,
-      GST_TYPE_OMX_H264_DEC))
+          GST_TYPE_OMX_H264_DEC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_scaler", GST_RANK_NONE,
           GST_TYPE_OMX_SCALER))
     return FALSE;
 
-  if (!gst_element_register (omx, "rromx_deiscaler", GST_RANK_NONE,
+  if (!gst_element_register (omx, "omx_hdeiscaler", GST_RANK_NONE,
           GST_TYPE_OMX_DEISCALER))
     return FALSE;
-    
+
   return TRUE;
 }
 
