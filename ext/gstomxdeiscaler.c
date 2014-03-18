@@ -129,8 +129,8 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_fill_callback);
 
-  //~ gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
-  gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
+  gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
+  //~ gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
   /* debug category for fltering log messages */
   GST_DEBUG_CATEGORY_INIT (gst_omx_deiscaler_debug, "omx_deiscaler", 0,
       "RidgeRun's OMX based deiscaler");
@@ -282,7 +282,12 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
     this->in_format.width = -1;
     goto invalidcaps;
   }
-  this->in_format.width_padded = GST_OMX_ALIGN (this->in_format.width, 16);
+
+  GST_DEBUG_OBJECT (this, "Reading stride");
+  if (!gst_structure_get_int (structure, "stride",
+          &this->in_format.width_padded)) {
+    this->in_format.width_padded = GST_OMX_ALIGN (this->in_format.width, 16);
+  }
 
   GST_LOG_OBJECT (this, "Reading height");
   if (!gst_structure_get_int (structure, "height", &this->in_format.height)) {
