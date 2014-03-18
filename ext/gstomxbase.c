@@ -292,7 +292,6 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->requested_size = 0;
   this->peer_alloc = TRUE;
   this->flushing = FALSE;
-  this->configured = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
 
@@ -500,6 +499,52 @@ gst_omx_base_finalize (GObject * object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+static gboolean
+gst_omx_base_check_caps (GstPad * pad, GstCaps * newcaps)
+{
+  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstCaps * caps = NULL;
+  GstStructure *structure = NULL;
+  GstStructure *newstructure = NULL;
+  gint width = 0, height = 0;
+  gint newwidth = 0, newheight = 0;
+
+  GST_LOG_OBJECT (this,"Check changes on new caps");
+
+  caps = gst_pad_get_negotiated_caps (pad);
+  if (!caps)
+    goto nocaps;
+
+  structure = gst_caps_get_structure (caps, 0);
+  newstructure = gst_caps_get_structure (newcaps, 0);
+
+  gst_structure_get_int (structure,"width",&width);
+  gst_structure_get_int (structure,"height",&height);
+  gst_structure_get_int (newstructure,"width",&newwidth);
+  gst_structure_get_int (newstructure,"height",&newheight);
+
+  if (width != newwidth || height != newheight)
+    goto initializeports;
+  else
+    goto notinitializeports;
+
+nocaps:
+  {
+    GST_DEBUG_OBJECT (this,"Caps are not negotiated yet");
+    return TRUE;
+  }
+initializeports:
+  {
+    GST_DEBUG_OBJECT (this,"There is a resolution change, initializing ports");
+    return TRUE;
+  }
+notinitializeports:
+  {
+    GST_DEBUG_OBJECT (this,"For new caps it's not necessary to initialize ports");
+    return FALSE;
+  }
+}
+
 /* vmethod implementations */
 static gboolean
 gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
@@ -508,19 +553,17 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
   GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
-  /* While correcting the interlaced value in caps, the plugin already configured caps 
-     but it has not started, and ports don't need to be initialized again */
-  if (!this->started && this->configured)
-    return TRUE;
-
   if (!klass->parse_caps)
     goto noparsecaps;
 
-  GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
-      GST_DEBUG_PAD_NAME (pad));
   if (!klass->parse_caps (pad, caps))
     goto capsinvalid;
 
+  if (!gst_omx_base_check_caps(pad, caps))
+    goto noresolutionchange;
+
+  GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
+      GST_DEBUG_PAD_NAME (pad));
   if (OMX_StateLoaded < this->state) {
     GST_INFO_OBJECT (this, "Resetting component");
     error = gst_omx_base_stop (this);
@@ -552,9 +595,13 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
 
   GST_DEBUG_OBJECT (this, "Caps %s set successfully",
       gst_caps_to_string (caps));
-  this->configured = TRUE;
   return TRUE;
 
+noresolutionchange:
+  {
+    GST_DEBUG_OBJECT (this, "Resolution not changed, ports not need to be reinitialized");
+    return TRUE;
+  }
 noparsecaps:
   {
     GST_ERROR_OBJECT (this, "%s doesn't have a parse caps function",
@@ -726,7 +773,6 @@ gst_omx_base_stop (GstOmxBase * this)
 
   GST_OBJECT_LOCK (this);
   this->flushing = FALSE;
-  this->configured = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
   GST_OBJECT_UNLOCK (this);

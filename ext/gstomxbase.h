@@ -55,7 +55,6 @@ struct _GstOmxBase
 
   gboolean peer_alloc;
   gboolean flushing;
-  gboolean configured;
   gboolean started;
   gboolean first_buffer;
 
