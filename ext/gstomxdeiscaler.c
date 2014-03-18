@@ -297,7 +297,7 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
   this->in_format.height_padded = this->in_format.height;
 
   if (!gst_structure_get_boolean (structure, "interlaced", &base->interlaced))
-    base->interlaced = TRUE;
+    base->interlaced = FALSE;
 
   GST_LOG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
