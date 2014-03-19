@@ -318,7 +318,7 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
       "\tFormat NV12\n"
-      "\tFramerate: %u/%u",
+      "\tFramerate: %u/%u"
       "\tInterlaced: %s",
       this->in_format.width,
       this->in_format.height,
