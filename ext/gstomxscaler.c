@@ -52,7 +52,8 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("video/x-raw-yuv,"
         "format=(fourcc)YUY2,"
-        "width=[16,1920]," "height=[16,1080]," "interlaced={true,false}")
+	"width=[16,1920]," "height=[16,1080]," 
+	"framerate=" GST_VIDEO_FPS_RANGE "," " interlaced={true,false}")
     );
 
 #define gst_omx_scaler_parent_class parent_class
