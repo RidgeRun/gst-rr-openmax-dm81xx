@@ -319,9 +319,11 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
       "\tSize: %ux%u\n"
       "\tFormat NV12\n"
       "\tFramerate: %u/%u",
+      "\tInterlaced: %s",
       this->in_format.width,
       this->in_format.height,
-      this->in_format.framerate_num, this->in_format.framerate_den);
+      this->in_format.framerate_num,
+      this->in_format.framerate_den, base->interlaced ? "true" : "false");
 
   /* Free old format containers */
   if (this->out_formats) {
@@ -491,7 +493,10 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   port->nBufferSize = this->in_format.size_padded;
   port->nBufferAlignment = 0;
   port->bBuffersContiguous = 0;
-  port->nBufferCountActual = 12;
+  port->nBufferCountActual = 6;
+
+  if (base->interlaced)
+    port->nBufferCountActual *= 2;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (base->handle, OMX_IndexParamPortDefinition, port);

@@ -395,7 +395,7 @@ gst_omx_mpeg2_dec_init_pads (GstOmxBase * base)
 
   port->nPortIndex = 0;
   port->eDir = OMX_DirInput;
-  port->nBufferCountActual = 6;
+  port->nBufferCountActual = 4;
   port->nBufferSize = this->format.size_padded;
   port->format.video.cMIMEType = "MPEG2";
   port->format.video.nFrameWidth = this->format.width;
