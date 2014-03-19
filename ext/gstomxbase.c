@@ -458,8 +458,9 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
     /* FilledLen calculated to achive the sencond field chroma position 
      * to be at 2/3 of the buffer size */
-    omxbuf->nFilledLen = (GST_BUFFER_SIZE (buf) * 3) >> 2;      /*TODO: Need to add the offsets? */
-    omxbuf->nOffset = 0;
+    omxbuf->nFilledLen =
+        (((GST_BUFFER_SIZE (buf)) * 3) >> 2) - omxpeerbuf->nOffset;
+    omxbuf->nOffset = omxpeerbuf->nOffset;
     omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
         OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE_BOTTOM;
@@ -956,7 +957,7 @@ gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
   if (this->interlaced) {
     numbufs = numbufs >> 1;
     this->field_offset =
-        (omxpeerbuffer->nFilledLen /*+omxpeerbuffer->nOffset */ ) / 3;
+        (omxpeerbuffer->nFilledLen + omxpeerbuffer->nOffset) / 3;
   }
 
   if (numbufs > peerpad->port->nBufferCountActual) {
@@ -970,7 +971,7 @@ gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
 nouse:
   {
     GST_ERROR_OBJECT (this,
-        "Can't share buffers, not enough buffers provided by the peer %s",
+        "Not enough buffers provided by the peer, can't share buffers: %s",
         gst_omx_error_to_str (error));
     return error;
   }
@@ -1001,7 +1002,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     error =
         gst_omx_base_init_use_buffer (this, pad, &peerbuffers, omxpeerbuffer);
     if (error != OMX_ErrorNone)
-      goto noalloc;
+      goto out;
   }
 
   if (this->interlaced)
@@ -1067,8 +1068,8 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       goto addbuffer;
   }
 
+out:
   return error;
-
 
 nouse:
   {
