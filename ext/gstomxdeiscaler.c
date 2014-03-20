@@ -68,7 +68,41 @@ static GstStaticPadTemplate src1_template = GST_STATIC_PAD_TEMPLATE ("src_01",
     );
 
 #define gst_omx_deiscaler_parent_class parent_class
+
+#define _GST_OMX_DEISCALER_DEFINE_TYPE(TypeName, type_name) \
+\
+static void     type_name##_class_intern_init (gpointer klass) \
+{ \
+  gst_omx_deiscaler_parent_class = g_type_class_peek_parent (klass); \
+  gst_omx_deiscaler_class_init ((GstOmxDeiscalerClass *) klass); \
+} \
+\
+GType \
+type_name##_get_type (void) \
+{ \
+  static volatile gsize g_define_type_id__volatile = 0; \
+  if (g_once_init_enter (&g_define_type_id__volatile))  \
+    { \
+      GType g_define_type_id = \
+        g_type_register_static_simple (GST_TYPE_OMX_BASE, \
+                                       g_intern_static_string (#TypeName), \
+                                       sizeof (TypeName##Class), \
+                                       (GClassInitFunc) type_name##_class_intern_init, \
+                                       sizeof (TypeName), \
+                                       (GInstanceInitFunc) gst_omx_deiscaler_init, \
+                                       (GTypeFlags) 0); \
+      g_once_init_leave (&g_define_type_id__volatile, g_define_type_id); \
+    }					\
+  return g_define_type_id__volatile;	\
+}                               /* closes type_name##_get_type() */
+
+
+
 G_DEFINE_TYPE (GstOmxDeiscaler, gst_omx_deiscaler, GST_TYPE_OMX_BASE);
+_GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxHDeiscaler, gst_omx_hdeiscaler);
+_GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxMDeiscaler, gst_omx_mdeiscaler);
+
+
 
 static gboolean gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_deiscaler_init_pads (GstOmxBase * this);
@@ -129,11 +163,18 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_fill_callback);
 
-  gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
-  //~ gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
   /* debug category for fltering log messages */
   GST_DEBUG_CATEGORY_INIT (gst_omx_deiscaler_debug, "omx_deiscaler", 0,
       "RidgeRun's OMX based deiscaler");
+
+  if (G_TYPE_CHECK_CLASS_TYPE (klass, GST_TYPE_OMX_HDEISCALER)) {
+    gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
+  } else {
+    gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
+  }
+
+  GST_INFO ("Using %s deiscaler component", gstomxbase_class->handle_name);
+
 }
 
 /* initialize the new element
