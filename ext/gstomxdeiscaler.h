@@ -59,6 +59,9 @@ struct _GstOmxDeiscaler
 
   GstOmxFormat in_format;
   GList *out_formats;
+  
+  /* Properties */
+  guint framerate_divisor;
 };
 
 struct _GstOmxDeiscalerClass

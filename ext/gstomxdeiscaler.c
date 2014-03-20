@@ -67,6 +67,13 @@ static GstStaticPadTemplate src1_template = GST_STATIC_PAD_TEMPLATE ("src_01",
         "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced=false")
     );
 
+enum
+{
+  PROP_0,
+  PROP_RATE_DIV,
+};
+#define GST_OMX_DEISCALER_RATE_DIV_DEFAULT      1
+
 #define gst_omx_deiscaler_parent_class parent_class
 
 #define _GST_OMX_DEISCALER_DEFINE_TYPE(TypeName, type_name) \
@@ -94,15 +101,11 @@ type_name##_get_type (void) \
       g_once_init_leave (&g_define_type_id__volatile, g_define_type_id); \
     }					\
   return g_define_type_id__volatile;	\
-}                               /* closes type_name##_get_type() */
-
-
+}
 
 G_DEFINE_TYPE (GstOmxDeiscaler, gst_omx_deiscaler, GST_TYPE_OMX_BASE);
 _GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxHDeiscaler, gst_omx_hdeiscaler);
 _GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxMDeiscaler, gst_omx_mdeiscaler);
-
-
 
 static gboolean gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_deiscaler_init_pads (GstOmxBase * this);
@@ -119,6 +122,10 @@ static GstPad *gst_omx_deiscaler_request_new_pad (GstElement * element,
     GstPadTemplate * templ, const gchar * unused);
 static void gst_omx_deiscaler_release_pad (GstElement * element, GstPad * pad);
 
+static void gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+static void gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
 static void gst_omx_deiscaler_finalize (GObject * object);
 
 /* GObject vmethod implementations */
@@ -139,7 +146,7 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
       "OpenMAX video deiscaler",
       "Filter/Converter/Video/Deiscaler",
       "RidgeRun's OMX based deiscaler",
-      "Michael Gruner <michael.gruner@ridgerun.com>");
+      "Melissa Montero <melissa.montero@ridgerun.com>");
 
   gstelement_class->request_new_pad =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_request_new_pad);
@@ -153,9 +160,14 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
 
-
+  gobject_class->set_property = gst_omx_deiscaler_set_property;
+  gobject_class->get_property = gst_omx_deiscaler_get_property;
   gobject_class->finalize = gst_omx_deiscaler_finalize;
 
+  g_object_class_install_property (gobject_class, PROP_RATE_DIV,
+      g_param_spec_uint ("framerate-divisor", "Output framerate divisor",
+          "Output framerate = (2 * input_framerate) / framerate_divisor",
+          1, 60, GST_OMX_DEISCALER_RATE_DIV_DEFAULT, G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_deiscaler_set_caps);
   gstomxbase_class->init_ports =
@@ -191,6 +203,8 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
   element_class = GST_ELEMENT_GET_CLASS (GST_ELEMENT (this));
 
+  /* Initialize properties */
+  this->framerate_divisor = GST_OMX_DEISCALER_RATE_DIV_DEFAULT;
   this->srcpads = NULL;
   l = gst_element_class_get_pad_template_list (element_class);
   while (l) {
@@ -218,6 +232,40 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
     }
 
     l = l->next;
+  }
+}
+
+static void
+gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
+
+  switch (prop_id) {
+    case PROP_RATE_DIV:
+      this->framerate_divisor = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting frame rate divisor to %d",
+          this->framerate_divisor);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
+
+  switch (prop_id) {
+    case PROP_RATE_DIV:
+      g_value_set_uint (value, this->framerate_divisor);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
   }
 }
 
@@ -475,7 +523,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
     this->in_format.height = this->in_format.height >> 1;
 
   GST_OMX_INIT_STRUCT (&subsampling_factor, OMX_CONFIG_SUBSAMPLING_FACTOR);
-  subsampling_factor.nSubSamplingFactor = 1;
+  subsampling_factor.nSubSamplingFactor = this->framerate_divisor;
   g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetConfig (base->handle,
