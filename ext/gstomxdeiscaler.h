@@ -50,6 +50,15 @@ typedef struct _GstOmxDeiscalerClass GstOmxHDeiscalerClass;
 typedef struct _GstOmxDeiscaler GstOmxMDeiscaler;
 typedef struct _GstOmxDeiscalerClass GstOmxMDeiscalerClass;
 
+typedef struct _GstCropArea GstCropArea;
+struct _GstCropArea
+{
+  guint x;
+  guint y;
+  guint width;
+  guint height;
+};
+
 struct _GstOmxDeiscaler
 {
   GstOmxBase base;
@@ -62,6 +71,8 @@ struct _GstOmxDeiscaler
   
   /* Properties */
   guint framerate_divisor;
+  gchar *crop_str;
+  GstCropArea crop_area;
 };
 
 struct _GstOmxDeiscalerClass

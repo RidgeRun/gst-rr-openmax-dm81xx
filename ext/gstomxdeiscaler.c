@@ -71,8 +71,10 @@ enum
 {
   PROP_0,
   PROP_RATE_DIV,
+  PROP_CROP_AREA
 };
-#define GST_OMX_DEISCALER_RATE_DIV_DEFAULT      1
+#define GST_OMX_DEISCALER_RATE_DIV_DEFAULT       1
+#define GST_OMX_DEISCALER_CROP_AREA_DEFAULT      NULL
 
 #define gst_omx_deiscaler_parent_class parent_class
 
@@ -165,9 +167,14 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gobject_class->finalize = gst_omx_deiscaler_finalize;
 
   g_object_class_install_property (gobject_class, PROP_RATE_DIV,
-      g_param_spec_uint ("framerate-divisor", "Output framerate divisor",
+      g_param_spec_uint ("framerate-divisor", "Output frame rate divisor",
           "Output framerate = (2 * input_framerate) / framerate_divisor",
           1, 60, GST_OMX_DEISCALER_RATE_DIV_DEFAULT, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_CROP_AREA,
+      g_param_spec_string ("crop-area", "Select the crop area",
+          "Selects the crop area using the format <startX>,<startY>@"
+          "<cropWidth>x<cropHeight>", GST_OMX_DEISCALER_CROP_AREA_DEFAULT,
+          G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_deiscaler_set_caps);
   gstomxbase_class->init_ports =
@@ -205,6 +212,9 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
 
   /* Initialize properties */
   this->framerate_divisor = GST_OMX_DEISCALER_RATE_DIV_DEFAULT;
+  this->crop_str = GST_OMX_DEISCALER_CROP_AREA_DEFAULT;
+
+  /* Add pads */
   this->srcpads = NULL;
   l = gst_element_class_get_pad_template_list (element_class);
   while (l) {
@@ -235,6 +245,61 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
   }
 }
 
+static gchar *
+gst_omx_deiscaler_get_crop_params (GstOmxDeiscaler * this, gchar * crop_str,
+    GstCropArea * crop_area)
+{
+  gchar *crop_param = NULL;
+  gchar str[20];
+
+  g_return_val_if_fail (crop_str, NULL);
+
+  GST_DEBUG_OBJECT (this, "Getting crop parameters");
+
+  strcpy (str, crop_str);
+
+  /* Searching for start x param */
+  crop_param = strtok (str, ",");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->x = atoi (crop_param);
+
+  /* Searching for start y param */
+  crop_param = strtok (NULL, "@");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->y = atoi (crop_param);
+
+  /* Searching for cropWidth param */
+  crop_param = strtok (NULL, "X");
+  if (crop_param == NULL)
+    goto wrongparams;
+
+  crop_area->width = atoi (crop_param);
+
+  /* Searching for cropHeight param */
+  crop_param = strtok (NULL, "");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->height = atoi (crop_param);
+
+  GST_INFO_OBJECT (this, "Setting crop area to: (%d,%d)@%dx%d\n",
+      crop_area->x, crop_area->y, crop_area->width, crop_area->height);
+
+  return crop_str;
+
+wrongparams:
+  {
+    GST_WARNING_OBJECT (this, "Cropping area is not valid. Format must be "
+        "<startX>,<startY>@<cropWidth>x<cropHeight");
+    g_free (crop_str);
+    return NULL;
+  }
+}
+
 static void
 gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
@@ -246,6 +311,12 @@ gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
       this->framerate_divisor = g_value_get_uint (value);
       GST_INFO_OBJECT (this, "Setting frame rate divisor to %d",
           this->framerate_divisor);
+      break;
+    case PROP_CROP_AREA:
+      this->crop_str = g_ascii_strup (g_value_get_string (value), -1);
+      this->crop_str =
+          gst_omx_deiscaler_get_crop_params (this, this->crop_str,
+          &this->crop_area);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -263,6 +334,8 @@ gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
     case PROP_RATE_DIV:
       g_value_set_uint (value, this->framerate_divisor);
       break;
+    case PROP_CROP_AREA:
+      g_value_set_string (value, this->crop_str);
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -286,6 +359,8 @@ gst_omx_deiscaler_finalize (GObject * object)
     this->out_formats = NULL;
   }
 
+  if (this->crop_str)
+    g_free (this->crop_str);
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -820,10 +895,18 @@ gst_omx_deiscaler_sink_dynamic_configuration (GstOmxDeiscaler * this,
   resolution.Frm1Width = 0;
   resolution.Frm1Height = 0;
   resolution.Frm1Pitch = 0;
-  resolution.FrmStartX = 0;
-  resolution.FrmStartY = 0;
-  resolution.FrmCropWidth = format->width;
-  resolution.FrmCropHeight = format->height;
+
+  if (this->crop_str) {
+    resolution.FrmStartX = this->crop_area.x;
+    resolution.FrmStartY = this->crop_area.y;
+    resolution.FrmCropWidth = this->crop_area.width;
+    resolution.FrmCropHeight = this->crop_area.height;
+  } else {
+    resolution.FrmStartX = 0;
+    resolution.FrmStartY = 0;
+    resolution.FrmCropWidth = format->width;
+    resolution.FrmCropHeight = format->height;
+  }
 
   resolution.eDir = OMX_DirInput;
   resolution.nChId = 0;
