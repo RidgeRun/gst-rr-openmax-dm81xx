@@ -71,7 +71,7 @@ enum
 {
   PROP_0,
   PROP_RATE_DIV,
-  PROP_CROP_AREA
+  PROP_CROP_AREA,
 };
 #define GST_OMX_DEISCALER_RATE_DIV_DEFAULT       1
 #define GST_OMX_DEISCALER_CROP_AREA_DEFAULT      NULL
@@ -336,6 +336,7 @@ gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
       break;
     case PROP_CROP_AREA:
       g_value_set_string (value, this->crop_str);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
