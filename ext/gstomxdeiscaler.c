@@ -67,8 +67,47 @@ static GstStaticPadTemplate src1_template = GST_STATIC_PAD_TEMPLATE ("src_01",
         "framerate=" GST_VIDEO_FPS_RANGE "," "interlaced=false")
     );
 
+enum
+{
+  PROP_0,
+  PROP_RATE_DIV,
+  PROP_CROP_AREA,
+};
+#define GST_OMX_DEISCALER_RATE_DIV_DEFAULT       1
+#define GST_OMX_DEISCALER_CROP_AREA_DEFAULT      NULL
+
 #define gst_omx_deiscaler_parent_class parent_class
+
+#define _GST_OMX_DEISCALER_DEFINE_TYPE(TypeName, type_name) \
+\
+static void     type_name##_class_intern_init (gpointer klass) \
+{ \
+  gst_omx_deiscaler_parent_class = g_type_class_peek_parent (klass); \
+  gst_omx_deiscaler_class_init ((GstOmxDeiscalerClass *) klass); \
+} \
+\
+GType \
+type_name##_get_type (void) \
+{ \
+  static volatile gsize g_define_type_id__volatile = 0; \
+  if (g_once_init_enter (&g_define_type_id__volatile))  \
+    { \
+      GType g_define_type_id = \
+        g_type_register_static_simple (GST_TYPE_OMX_BASE, \
+                                       g_intern_static_string (#TypeName), \
+                                       sizeof (TypeName##Class), \
+                                       (GClassInitFunc) type_name##_class_intern_init, \
+                                       sizeof (TypeName), \
+                                       (GInstanceInitFunc) gst_omx_deiscaler_init, \
+                                       (GTypeFlags) 0); \
+      g_once_init_leave (&g_define_type_id__volatile, g_define_type_id); \
+    }					\
+  return g_define_type_id__volatile;	\
+}
+
 G_DEFINE_TYPE (GstOmxDeiscaler, gst_omx_deiscaler, GST_TYPE_OMX_BASE);
+_GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxHDeiscaler, gst_omx_hdeiscaler);
+_GST_OMX_DEISCALER_DEFINE_TYPE (GstOmxMDeiscaler, gst_omx_mdeiscaler);
 
 static gboolean gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_deiscaler_init_pads (GstOmxBase * this);
@@ -85,6 +124,10 @@ static GstPad *gst_omx_deiscaler_request_new_pad (GstElement * element,
     GstPadTemplate * templ, const gchar * unused);
 static void gst_omx_deiscaler_release_pad (GstElement * element, GstPad * pad);
 
+static void gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+static void gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
 static void gst_omx_deiscaler_finalize (GObject * object);
 
 /* GObject vmethod implementations */
@@ -105,7 +148,7 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
       "OpenMAX video deiscaler",
       "Filter/Converter/Video/Deiscaler",
       "RidgeRun's OMX based deiscaler",
-      "Michael Gruner <michael.gruner@ridgerun.com>");
+      "Melissa Montero <melissa.montero@ridgerun.com>");
 
   gstelement_class->request_new_pad =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_request_new_pad);
@@ -119,9 +162,19 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
 
-
+  gobject_class->set_property = gst_omx_deiscaler_set_property;
+  gobject_class->get_property = gst_omx_deiscaler_get_property;
   gobject_class->finalize = gst_omx_deiscaler_finalize;
 
+  g_object_class_install_property (gobject_class, PROP_RATE_DIV,
+      g_param_spec_uint ("framerate-divisor", "Output frame rate divisor",
+          "Output framerate = (2 * input_framerate) / framerate_divisor",
+          1, 60, GST_OMX_DEISCALER_RATE_DIV_DEFAULT, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_CROP_AREA,
+      g_param_spec_string ("crop-area", "Select the crop area",
+          "Selects the crop area using the format <startX>,<startY>@"
+          "<cropWidth>x<cropHeight>", GST_OMX_DEISCALER_CROP_AREA_DEFAULT,
+          G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_deiscaler_set_caps);
   gstomxbase_class->init_ports =
@@ -129,11 +182,18 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_fill_callback);
 
-  gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
-  //~ gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
   /* debug category for fltering log messages */
   GST_DEBUG_CATEGORY_INIT (gst_omx_deiscaler_debug, "omx_deiscaler", 0,
       "RidgeRun's OMX based deiscaler");
+
+  if (G_TYPE_CHECK_CLASS_TYPE (klass, GST_TYPE_OMX_HDEISCALER)) {
+    gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIHDUALOUT";
+  } else {
+    gstomxbase_class->handle_name = "OMX.TI.VPSSM3.VFPC.DEIMDUALOUT";
+  }
+
+  GST_INFO ("Using %s deiscaler component", gstomxbase_class->handle_name);
+
 }
 
 /* initialize the new element
@@ -150,6 +210,11 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
   element_class = GST_ELEMENT_GET_CLASS (GST_ELEMENT (this));
 
+  /* Initialize properties */
+  this->framerate_divisor = GST_OMX_DEISCALER_RATE_DIV_DEFAULT;
+  this->crop_str = GST_OMX_DEISCALER_CROP_AREA_DEFAULT;
+
+  /* Add pads */
   this->srcpads = NULL;
   l = gst_element_class_get_pad_template_list (element_class);
   while (l) {
@@ -180,6 +245,104 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
   }
 }
 
+static gchar *
+gst_omx_deiscaler_get_crop_params (GstOmxDeiscaler * this, gchar * crop_str,
+    GstCropArea * crop_area)
+{
+  gchar *crop_param = NULL;
+  gchar str[20];
+
+  g_return_val_if_fail (crop_str, NULL);
+
+  GST_DEBUG_OBJECT (this, "Getting crop parameters");
+
+  strcpy (str, crop_str);
+
+  /* Searching for start x param */
+  crop_param = strtok (str, ",");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->x = atoi (crop_param);
+
+  /* Searching for start y param */
+  crop_param = strtok (NULL, "@");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->y = atoi (crop_param);
+
+  /* Searching for cropWidth param */
+  crop_param = strtok (NULL, "X");
+  if (crop_param == NULL)
+    goto wrongparams;
+
+  crop_area->width = atoi (crop_param);
+
+  /* Searching for cropHeight param */
+  crop_param = strtok (NULL, "");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->height = atoi (crop_param);
+
+  GST_INFO_OBJECT (this, "Setting crop area to: (%d,%d)@%dx%d\n",
+      crop_area->x, crop_area->y, crop_area->width, crop_area->height);
+
+  return crop_str;
+
+wrongparams:
+  {
+    GST_WARNING_OBJECT (this, "Cropping area is not valid. Format must be "
+        "<startX>,<startY>@<cropWidth>x<cropHeight");
+    g_free (crop_str);
+    return NULL;
+  }
+}
+
+static void
+gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
+
+  switch (prop_id) {
+    case PROP_RATE_DIV:
+      this->framerate_divisor = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting frame rate divisor to %d",
+          this->framerate_divisor);
+      break;
+    case PROP_CROP_AREA:
+      this->crop_str = g_ascii_strup (g_value_get_string (value), -1);
+      this->crop_str =
+          gst_omx_deiscaler_get_crop_params (this, this->crop_str,
+          &this->crop_area);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
+
+  switch (prop_id) {
+    case PROP_RATE_DIV:
+      g_value_set_uint (value, this->framerate_divisor);
+      break;
+    case PROP_CROP_AREA:
+      g_value_set_string (value, this->crop_str);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
 static void
 gst_omx_deiscaler_finalize (GObject * object)
 {
@@ -197,6 +360,8 @@ gst_omx_deiscaler_finalize (GObject * object)
     this->out_formats = NULL;
   }
 
+  if (this->crop_str)
+    g_free (this->crop_str);
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -434,7 +599,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
     this->in_format.height = this->in_format.height >> 1;
 
   GST_OMX_INIT_STRUCT (&subsampling_factor, OMX_CONFIG_SUBSAMPLING_FACTOR);
-  subsampling_factor.nSubSamplingFactor = 1;
+  subsampling_factor.nSubSamplingFactor = this->framerate_divisor;
   g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetConfig (base->handle,
@@ -731,10 +896,18 @@ gst_omx_deiscaler_sink_dynamic_configuration (GstOmxDeiscaler * this,
   resolution.Frm1Width = 0;
   resolution.Frm1Height = 0;
   resolution.Frm1Pitch = 0;
-  resolution.FrmStartX = 0;
-  resolution.FrmStartY = 0;
-  resolution.FrmCropWidth = format->width;
-  resolution.FrmCropHeight = format->height;
+
+  if (this->crop_str) {
+    resolution.FrmStartX = this->crop_area.x;
+    resolution.FrmStartY = this->crop_area.y;
+    resolution.FrmCropWidth = this->crop_area.width;
+    resolution.FrmCropHeight = this->crop_area.height;
+  } else {
+    resolution.FrmStartX = 0;
+    resolution.FrmStartY = 0;
+    resolution.FrmCropWidth = format->width;
+    resolution.FrmCropHeight = format->height;
+  }
 
   resolution.eDir = OMX_DirInput;
   resolution.nChId = 0;

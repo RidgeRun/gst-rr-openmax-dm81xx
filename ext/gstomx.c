@@ -78,9 +78,12 @@ omx_init (GstPlugin * omx)
     return FALSE;
 
   if (!gst_element_register (omx, "omx_hdeiscaler", GST_RANK_NONE,
-          GST_TYPE_OMX_DEISCALER))
+          GST_TYPE_OMX_HDEISCALER))
     return FALSE;
 
+  if (!gst_element_register (omx, "omx_mdeiscaler", GST_RANK_NONE,
+          GST_TYPE_OMX_MDEISCALER))
+    return FALSE;
   return TRUE;
 }
 
