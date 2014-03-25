@@ -658,7 +658,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   port->nBufferSize = this->in_format.size_padded;
   port->nBufferAlignment = 0;
   port->bBuffersContiguous = 0;
-  port->nBufferCountActual = 6;
+  port->nBufferCountActual = base->input_buffers;
 
   if (base->interlaced)
     port->nBufferCountActual *= 2;
@@ -704,7 +704,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
 
     port->nBufferSize = out_format->size_padded;
     port->nBufferAlignment = 0;
-    port->nBufferCountActual = 8;
+    port->nBufferCountActual = base->output_buffers;
 
     GST_DEBUG_OBJECT (this,
         "Configuring port %lu: width=%lu, height=%lu, stride=%lu, format=%u, buffersize=%lu",

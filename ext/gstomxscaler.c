@@ -56,6 +56,14 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
 	"framerate=" GST_VIDEO_FPS_RANGE "," " interlaced={true,false}")
     );
 
+enum
+{
+  PROP_0,
+  PROP_CROP_AREA,
+};
+
+#define GST_OMX_DEISCALER_CROP_AREA_DEFAULT      NULL
+
 #define gst_omx_scaler_parent_class parent_class
 G_DEFINE_TYPE (GstOmxScaler, gst_omx_scaler, GST_TYPE_OMX_BASE);
 
@@ -65,6 +73,11 @@ static GstFlowReturn gst_omx_scaler_fill_callback (GstOmxBase *,
     OMX_BUFFERHEADERTYPE * buffer);
 static OMX_ERRORTYPE gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
     GstOmxPad *, GstOmxFormat *);
+static void gst_omx_scaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+static void gst_omx_scaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
+static void gst_omx_scaler_finalize (GObject * object);
 
 /* GObject vmethod implementations */
 
@@ -72,9 +85,11 @@ static OMX_ERRORTYPE gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
 static void
 gst_omx_scaler_class_init (GstOmxScalerClass * klass)
 {
+  GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
 
+  gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
   gstomxbase_class = GST_OMX_BASE_CLASS (klass);
 
@@ -88,6 +103,16 @@ gst_omx_scaler_class_init (GstOmxScalerClass * klass)
       gst_static_pad_template_get (&src_template));
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
+
+  gobject_class->set_property = gst_omx_scaler_set_property;
+  gobject_class->get_property = gst_omx_scaler_get_property;
+  gobject_class->finalize = gst_omx_scaler_finalize;
+
+  g_object_class_install_property (gobject_class, PROP_CROP_AREA,
+      g_param_spec_string ("crop-area", "Select the crop area",
+          "Selects the crop area using the format <startX>,<startY>@"
+          "<cropWidth>x<cropHeight>", GST_OMX_DEISCALER_CROP_AREA_DEFAULT,
+          G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_scaler_set_caps);
   gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_scaler_init_pads);
@@ -109,6 +134,13 @@ gst_omx_scaler_init (GstOmxScaler * this)
 {
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
+  /* Initialize properties */
+  this->crop_str = GST_OMX_DEISCALER_CROP_AREA_DEFAULT;
+  this->crop_area.x = 0;
+  this->crop_area.y = 0;
+  this->crop_area.width = 0;
+  this->crop_area.height = 0;
+
   this->sinkpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&sink_template), "sink"));
@@ -122,6 +154,107 @@ gst_omx_scaler_init (GstOmxScaler * this)
   gst_pad_set_active (this->srcpad, TRUE);
   gst_omx_base_add_pad (GST_OMX_BASE (this), this->srcpad);
   gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
+}
+
+static gchar *
+gst_omx_scaler_get_crop_params (GstOmxScaler * this, gchar * crop_str,
+    GstCropArea * crop_area)
+{
+  gchar *crop_param = NULL;
+  gchar str[20];
+
+  g_return_val_if_fail (crop_str, NULL);
+
+  GST_DEBUG_OBJECT (this, "Getting crop parameters");
+
+  strcpy (str, crop_str);
+
+  /* Searching for start x param */
+  crop_param = strtok (str, ",");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->x = atoi (crop_param);
+
+  /* Searching for start y param */
+  crop_param = strtok (NULL, "@");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->y = atoi (crop_param);
+
+  /* Searching for cropWidth param */
+  crop_param = strtok (NULL, "X");
+  if (crop_param == NULL)
+    goto wrongparams;
+
+  crop_area->width = atoi (crop_param);
+
+  /* Searching for cropHeight param */
+  crop_param = strtok (NULL, "");
+  if (!crop_param)
+    goto wrongparams;
+
+  crop_area->height = atoi (crop_param);
+
+  GST_INFO_OBJECT (this, "Setting crop area to: (%d,%d)@%dx%d\n",
+      crop_area->x, crop_area->y, crop_area->width, crop_area->height);
+
+  return crop_str;
+
+wrongparams:
+  {
+    GST_WARNING_OBJECT (this, "Cropping area is not valid. Format must be "
+        "<startX>,<startY>@<cropWidth>x<cropHeight");
+    g_free (crop_str);
+    return NULL;
+  }
+}
+
+static void
+gst_omx_scaler_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstOmxScaler *this = GST_OMX_SCALER (object);
+
+  switch (prop_id) {
+    case PROP_CROP_AREA:
+      this->crop_str = g_ascii_strup (g_value_get_string (value), -1);
+      this->crop_str =
+          gst_omx_scaler_get_crop_params (this, this->crop_str,
+          &this->crop_area);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_scaler_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstOmxScaler *this = GST_OMX_SCALER (object);
+
+  switch (prop_id) {
+    case PROP_CROP_AREA:
+      g_value_set_string (value, this->crop_str);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_scaler_finalize (GObject * object)
+{
+  GstOmxScaler *this = GST_OMX_SCALER (object);
+
+  if (this->crop_str)
+    g_free (this->crop_str);
+  /* Chain up to the parent class */
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static gboolean
@@ -289,7 +422,7 @@ gst_omx_scaler_init_pads (GstOmxBase * base)
   port->nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX;
   port->eDir = OMX_DirInput;
 
-  port->nBufferCountActual = 6;
+  port->nBufferCountActual = base->input_buffers;;
   port->format.video.nFrameWidth = this->in_format.width;       //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
   port->format.video.nFrameHeight = this->in_format.height;     //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
   port->format.video.nStride = this->in_format.width_padded;
@@ -311,7 +444,7 @@ gst_omx_scaler_init_pads (GstOmxBase * base)
   port->nPortIndex = OMX_VFPC_OUTPUT_PORT_START_INDEX;
   port->eDir = OMX_DirOutput;
 
-  port->nBufferCountActual = 6;
+  port->nBufferCountActual = base->output_buffers;
   port->format.video.nFrameWidth = this->out_format.width;      //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
   port->format.video.nFrameHeight = this->out_format.height;    //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
   port->format.video.nStride = this->out_format.width_padded;
@@ -486,10 +619,10 @@ gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
   resolution.Frm1Width = 0;
   resolution.Frm1Height = 0;
   resolution.Frm1Pitch = 0;
-  resolution.FrmStartX = port->eDir == OMX_DirInput ? 0 : 0;
-  resolution.FrmStartY = port->eDir == OMX_DirInput ? 0 : 0;
-  resolution.FrmCropWidth = port->eDir == OMX_DirInput ? 0 : 0; // Adjust to width
-  resolution.FrmCropHeight = port->eDir == OMX_DirInput ? 0 : 0;        // Adjust to height
+  resolution.FrmStartX = port->eDir == OMX_DirInput ? this->crop_area.x : 0;
+  resolution.FrmStartY = port->eDir == OMX_DirInput ? this->crop_area.y : 0;
+  resolution.FrmCropWidth = port->eDir == OMX_DirInput ? this->crop_area.width : 0;
+  resolution.FrmCropHeight = port->eDir == OMX_DirInput ? this->crop_area.height : 0;
 
   resolution.eDir = port->eDir;
   resolution.nChId = 0;

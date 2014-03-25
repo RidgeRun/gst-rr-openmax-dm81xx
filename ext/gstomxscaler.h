@@ -23,6 +23,7 @@
 #define __GST_OMX_SCALER_H__
 
 #include "gstomxbase.h"
+#include "gstomxdeiscaler.h"
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_SCALER \
@@ -45,6 +46,10 @@ struct _GstOmxScaler
   GstPad *srcpad, *sinkpad;
   GstOmxFormat in_format;
   GstOmxFormat out_format;
+
+  /* Properties */
+  gchar *crop_str;
+  GstCropArea crop_area;
 };
 
 struct _GstOmxScalerClass

@@ -58,7 +58,12 @@ enum
 {
   PROP_0,
   PROP_PEER_ALLOC,
+  PROP_NUM_INPUT_BUFFERS,
+  PROP_NUM_OUTPUT_BUFFERS,
 };
+
+#define GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT    8
+#define GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT   8
 
 #define gst_omx_base_parent_class parent_class
 static GstElementClass *parent_class = NULL;
@@ -181,6 +186,16 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
           "Try to use buffers from downstream element",
           "Try to use buffers from downstream element", TRUE,
           G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_NUM_INPUT_BUFFERS,
+      g_param_spec_uint ("input-buffers", "Input buffers",
+          "OMX input buffers number",
+          1, 10, GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_NUM_OUTPUT_BUFFERS,
+      g_param_spec_uint ("output-buffers", "Output buffers",
+          "OMX output buffers number",
+          1, 16, GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 }
 
 static OMX_ERRORTYPE
@@ -297,6 +312,9 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
 
+  this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
+  this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;
+
   this->pads = NULL;
   this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
@@ -321,6 +339,14 @@ gst_omx_base_set_property (GObject * object, guint prop_id,
       this->peer_alloc = g_value_get_boolean (value);
       GST_INFO_OBJECT (this, "Setting peer-alloc to %d", this->peer_alloc);
       break;
+    case PROP_NUM_INPUT_BUFFERS:
+      this->input_buffers = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting input-buffers to %d", this->input_buffers);
+      break;
+    case PROP_NUM_OUTPUT_BUFFERS:
+      this->output_buffers = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting output-buffers to %d", this->output_buffers);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -336,6 +362,12 @@ gst_omx_base_get_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_PEER_ALLOC:
       g_value_set_boolean (value, this->peer_alloc);
+      break;
+    case PROP_NUM_INPUT_BUFFERS:
+      g_value_set_uint (value, this->input_buffers);
+      break;
+    case PROP_NUM_OUTPUT_BUFFERS:
+      g_value_set_uint (value, this->output_buffers);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -995,8 +1027,8 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   OMX_BUFFERHEADERTYPE *buffer = NULL;
   GList *peerbuffers = NULL;
   guint i;
-  GstOmxBufferData *bufdata;
-  guint32 maxsize, size;
+  GstOmxBufferData *bufdata = NULL;
+  guint32 maxsize, size = 0;
   gboolean divided_buffers = FALSE;
   gboolean top_field = TRUE;
   gpointer pbuffer = NULL;

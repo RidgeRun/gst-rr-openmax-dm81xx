@@ -395,7 +395,8 @@ gst_omx_mpeg2_dec_init_pads (GstOmxBase * base)
 
   port->nPortIndex = 0;
   port->eDir = OMX_DirInput;
-  port->nBufferCountActual = 4;
+  /* It's recommended to use 4 input buffers */
+  port->nBufferCountActual = base->input_buffers;;
   port->nBufferSize = this->format.size_padded;
   port->format.video.cMIMEType = "MPEG2";
   port->format.video.nFrameWidth = this->format.width;
@@ -419,7 +420,8 @@ gst_omx_mpeg2_dec_init_pads (GstOmxBase * base)
 
   port->nPortIndex = 1;
   port->eDir = OMX_DirOutput;
-  port->nBufferCountActual = 6;
+  /* It's recommended to use 6 output buffers */
+  port->nBufferCountActual = base->output_buffers;
   port->nBufferSize = this->format.size_padded;
   port->format.video.cMIMEType = "MPEG2";
   port->format.video.nFrameWidth = this->format.width;

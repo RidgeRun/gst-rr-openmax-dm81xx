@@ -54,6 +54,9 @@ struct _GstOmxBase
   guint32 requested_size;
   guint32 field_offset;
 
+  guint input_buffers;
+  guint output_buffers;
+
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
