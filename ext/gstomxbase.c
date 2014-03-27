@@ -2,6 +2,8 @@
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
  * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
+ * Copyright (C) 2014 Melissa Montero <melissa.montero@ridgerun.com>
+ * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -128,6 +130,7 @@ static OMX_ERRORTYPE gst_omx_base_push_buffers (GstOmxBase * this,
 static GstStateChangeReturn gst_omx_base_change_state (GstElement * element,
     GstStateChange transition);
 static GstFlowReturn gst_omx_base_chain (GstPad * pad, GstBuffer * buf);
+static gboolean gst_omx_base_event_handler (GstPad * pad, GstEvent * event);
 static gboolean gst_omx_base_set_caps (GstPad * pad, GstCaps * caps);
 
 static gboolean gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
@@ -1536,6 +1539,8 @@ gst_omx_base_add_pad (GstOmxBase * this, GstPad * pad)
 
   if (GST_PAD_SINK == GST_PAD_DIRECTION (pad)) {
     gst_pad_set_chain_function (pad, GST_DEBUG_FUNCPTR (gst_omx_base_chain));
+    gst_pad_set_event_function (pad,
+		GST_DEBUG_FUNCPTR (gst_omx_base_event_handler));
     gst_pad_set_setcaps_function (pad,
         GST_DEBUG_FUNCPTR (gst_omx_base_set_caps));
     gst_pad_set_bufferalloc_function (pad, gst_omx_base_alloc_buffer);
@@ -1714,4 +1719,47 @@ nofill:
     GST_ERROR_OBJECT (this, "Unable to recycle output buffer: %s",
         gst_omx_error_to_str (error));
   }
+}
+
+static gboolean 
+gst_omx_base_event_handler (GstPad *pad, GstEvent *event) {
+
+  GstOmxBase *this = GST_OMX_BASE(gst_pad_get_parent (pad));
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  
+  if (G_UNLIKELY (this == NULL)) {
+    gst_event_unref (event);
+    return FALSE;
+  }
+  
+  GST_DEBUG_OBJECT (this, "handling event %p %" GST_PTR_FORMAT, event, event);
+
+  switch (GST_EVENT_TYPE (event)) {
+   /* We only care for the EOS event, put the component in flush state so it doesn't 
+    * try to process any more buffers. */
+  case GST_EVENT_EOS:
+    {
+      GST_INFO_OBJECT (this, "EOS received, flushing ports");
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+      error =
+	gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+				   GST_PAD_UNKNOWN, NULL);
+      if (GST_OMX_FAIL (error))
+	goto noflush_eos;
+      break;
+    }
+  default:
+    break;
+  }
+  /* Handle everything else as default*/
+  gst_pad_event_default(pad,event);
+  
+  return TRUE;
+ 
+ noflush_eos:
+  GST_ERROR_OBJECT (this, "Unable to flush component after EOS: %s ",
+		    gst_omx_error_to_str (error));  
+  return FALSE;
 }
