@@ -1031,7 +1031,7 @@ gst_omx_decoder_wait_for_state (GstOmxDecoder * this, OMX_STATETYPE state)
     if (!g_cond_wait_until (&this->statecond, &this->statemutex, endtime))
       goto timeout;
 
-  GST_DEBUG_OBJECT (this, "Wait for state change sucsessfull");
+  GST_DEBUG_OBJECT (this, "Wait for state change successful");
   g_mutex_unlock (&this->statemutex);
 
   return OMX_ErrorNone;

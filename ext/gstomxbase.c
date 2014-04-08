@@ -1570,7 +1570,7 @@ gst_omx_base_wait_for_condition (GstOmxBase * this,
     if (!g_cond_wait_until (&this->waitcond, &this->waitmutex, endtime))
       goto timeout;
 
-  GST_DEBUG_OBJECT (this, "Wait for condition sucsessfull");
+  GST_DEBUG_OBJECT (this, "Wait for condition successful");
   g_mutex_unlock (&this->waitmutex);
 
   return OMX_ErrorNone;
