@@ -1728,7 +1728,7 @@ static gboolean
 gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 {
 
-  GstOmxBase *this = GST_OMX_BASE (gst_pad_get_parent (pad));
+  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (G_UNLIKELY (this == NULL)) {
