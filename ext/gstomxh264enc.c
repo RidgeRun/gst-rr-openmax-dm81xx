@@ -99,7 +99,7 @@ gst_omx_h264_enc_profile_get_type ()
             {0, NULL, NULL },
         };
 
-        type = g_enum_register_static ("GstOmxVideoAVCProfile", vals);
+        type = g_enum_register_static ("RRGstOmxVideoAVCProfile", vals);
     }
 
     return type;
@@ -134,7 +134,7 @@ gst_omx_h264_enc_level_get_type ()
             {0, NULL, NULL },
         };
 
-        type = g_enum_register_static ("GstOmxVideoAVCLevel", vals);
+        type = g_enum_register_static ("RRGstOmxVideoAVCLevel", vals);
     }
 
     return type;
@@ -159,7 +159,7 @@ gst_omx_h264_enc_preset_get_type ()
             {0, NULL, NULL },
         };
 
-        type = g_enum_register_static ("GstOmxVideoEncoderPreset", vals);
+        type = g_enum_register_static ("RRGstOmxVideoEncoderPreset", vals);
     }
 
     return type;
@@ -182,7 +182,7 @@ gst_omx_h264_enc_rate_ctrl_get_type ()
             {0, NULL, NULL },
         };
 
-        type = g_enum_register_static ("GstOmxVideoRateControlPreset", vals);
+        type = g_enum_register_static ("RRGstOmxVideoRateControlPreset", vals);
     }
 
     return type;
@@ -770,7 +770,7 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
   OMX_PARAM_PORTDEFINITIONTYPE *port;
   OMX_VIDEO_PARAM_AVCTYPE AVCParams;
   OMX_VIDEO_PARAM_ENCODER_PRESETTYPE EncoderPreset;
-  OMX_VIDEO_PARAM_BITRATETYPE bitrate;
+  OMX_VIDEO_CONFIG_DYNAMICPARAMS tDynParams;
   
   port = GST_OMX_PAD_PORT (pad);
 
@@ -781,23 +781,25 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
       this->rateControlPreset);
       
   GST_DEBUG_OBJECT (this, "Dynamically changing bitrate");
-  GST_OMX_INIT_STRUCT (&bitrate, OMX_VIDEO_PARAM_BITRATETYPE);
-  bitrate.nPortIndex = OMX_DirOutput;
-  OMX_GetParameter(base->handle, (OMX_INDEXTYPE) OMX_IndexParamVideoBitrate, &bitrate);
-  bitrate.nPortIndex = 1;  // OMX_VIDENC_OUTPUT_PORT
-  bitrate.nTargetBitrate = this->bitrate;
+  
+  GST_OMX_INIT_STRUCT (&tDynParams, OMX_VIDEO_CONFIG_DYNAMICPARAMS);
+  tDynParams.nPortIndex = 1;
+
+  OMX_GetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
+			 &tDynParams);
+  
+  tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.targetBitRate = this->bitrate;
   
   g_mutex_lock (&_omx_mutex);
-  error =
-      OMX_SetParameter (base->handle,
-      (OMX_INDEXTYPE) OMX_IndexParamVideoBitrate, &bitrate);
+  error = OMX_SetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
+			 &tDynParams);
   g_mutex_unlock (&_omx_mutex);
   if (GST_OMX_FAIL (error))
 	goto nobitrate;
 	
   GST_DEBUG_OBJECT (this, "Dynamically changing encoder AVC Parameters");
   GST_OMX_INIT_STRUCT (&AVCParams, OMX_VIDEO_PARAM_AVCTYPE);
-  AVCParams.nPortIndex = OMX_DirOutput;
+  AVCParams.nPortIndex = 1;
   OMX_GetParameter(base->handle, (OMX_INDEXTYPE) OMX_IndexParamVideoAvc, &AVCParams);
   AVCParams.eProfile = this->profile;
   AVCParams.eLevel = this->level;
@@ -814,7 +816,7 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
   
   GST_DEBUG_OBJECT (this, "Dynamically changing encoder preset");
   GST_OMX_INIT_STRUCT (&EncoderPreset, OMX_VIDEO_PARAM_ENCODER_PRESETTYPE);
-  EncoderPreset.nPortIndex = OMX_DirOutput;
+  EncoderPreset.nPortIndex = 1;
   OMX_GetParameter(base->handle, (OMX_INDEXTYPE) OMX_TI_IndexParamVideoEncoderPreset, &EncoderPreset);
   
   EncoderPreset.eEncodingModePreset = this->encodingPreset;
@@ -828,6 +830,23 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
   if (GST_OMX_FAIL (error))
 	goto nopreset;
 	
+  GST_DEBUG_OBJECT (this, "Dynamically changing I frames");
+  
+  GST_OMX_INIT_STRUCT (&tDynParams, OMX_VIDEO_CONFIG_DYNAMICPARAMS);
+  tDynParams.nPortIndex = 1;
+
+  OMX_GetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
+			 &tDynParams);
+  
+  tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.intraFrameInterval = this->i_period;
+  
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_SetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
+			 &tDynParams);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+	goto noiperiod;
+	
   /* Currently we use this logic to handle IDR period since the latest
    * EZSDK version doesn't have support for OMX_IndexConfigVideoAVCIntraPeriod
    */
@@ -837,7 +856,7 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
 	  {
 		  OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
 
-		  confIntraRefreshVOP.nPortIndex = OMX_DirOutput;
+		  confIntraRefreshVOP.nPortIndex = 1;
 
 		  OMX_GetConfig (base->handle,
 						    OMX_IndexConfigVideoIntraVOPRefresh,
@@ -881,4 +900,10 @@ nopreset:
         gst_omx_error_to_str (error));
     return error;
   }
+noiperiod:
+  {
+    GST_ERROR_OBJECT (this, "Unable to change dynamically i-period: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }  
 }

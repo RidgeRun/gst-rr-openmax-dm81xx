@@ -386,6 +386,7 @@ gst_omx_base_mark_free (gpointer data, gpointer user_data)
   GstOmxBufTab *buftab = (GstOmxBufTab *) user_data;
   GstOmxBufTabNode *node = (GstOmxBufTabNode *) data;
 
+  GST_DEBUG("Marking %p as free ",node->buffer);
   gst_omx_buf_tab_return_buffer (buftab, node->buffer);
 }
 
@@ -447,6 +448,10 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
         &busy);
     if (GST_OMX_FAIL (error))
       goto notfound;
+
+    if(busy){
+      GST_ERROR_OBJECT (this, "Buffer in buffer list is busy");
+	}
     gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
   } else {
 
@@ -469,7 +474,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
 
   bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
-  bufdata->buffer = buf;
+  bufdata->buffer = gst_buffer_ref (buf);
 
   if (this->interlaced)
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE;
@@ -480,21 +485,36 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   g_mutex_lock (&_omx_mutex);
   error = this->component->EmptyThisBuffer (this->handle, omxbuf);
   g_mutex_unlock (&_omx_mutex);
-  if (GST_OMX_FAIL (error))
+  if (GST_OMX_FAIL (error)){
     goto noempty;
-
+  }
 
   if (this->interlaced && GST_OMX_IS_OMX_BUFFER (buf)) {
     OMX_BUFFERHEADERTYPE tmpbuf;
+    gint tmpid;
     tmpbuf.pBuffer = omxbuf->pBuffer + this->field_offset;
+
     GST_LOG_OBJECT (this, "Getting bottom field buffer  %p->%p", &tmpbuf,
         tmpbuf.pBuffer);
 
+    tmpbuf.pAppPrivate = bufdata;
+
+    tmpid=((GstOmxBufferData *)(tmpbuf.pAppPrivate))->id;
+
+    ((GstOmxBufferData *)(tmpbuf.pAppPrivate))->id = ((GstOmxBufferData *)(tmpbuf.pAppPrivate))->id+omxpad->port->nBufferCountActual;
+
     error =
         gst_omx_buf_tab_find_buffer (omxpad->buffers, &tmpbuf, &omxbuf, &busy);
-    if (GST_OMX_FAIL (error))
+    if (GST_OMX_FAIL (error)){
       goto notfound;
+    }
+    if(busy){
+      GST_ERROR_OBJECT (this, "Buffer in buffer list is busy");
+	}
+
     gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
+
+    ((GstOmxBufferData *)(tmpbuf.pAppPrivate))->id =tmpid;
 
     /* FilledLen calculated to achive the sencond field chroma position 
      * to be at 2/3 of the buffer size */
@@ -512,13 +532,15 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     g_mutex_lock (&_omx_mutex);
     error = this->component->EmptyThisBuffer (this->handle, omxbuf);
     g_mutex_unlock (&_omx_mutex);
-    if (GST_OMX_FAIL (error))
+    if (GST_OMX_FAIL (error)){
+      gst_buffer_unref (buf);
       goto noempty;
+    }
   }
   /* g_mutex_lock (&this->waitmutex); */
   /* g_cond_wait (&this->waitcond, &this->waitmutex); */
   /* g_mutex_unlock (&this->waitmutex); */
-
+  gst_buffer_unref (buf);
   return GST_FLOW_OK;
 
 flushing:
@@ -552,7 +574,23 @@ notfound:
 nofreebuffer:
   {
     GST_ERROR_OBJECT (this, "Unable to get a free buffer: %s",
-        gst_omx_error_to_str (error));
+		      gst_omx_error_to_str (error));
+    GList *buffers;
+    OMX_BUFFERHEADERTYPE *buffer;
+    GstOmxBufTabNode *node;
+    gint j = 0;
+
+    buffers = omxpad->buffers->table;
+    GST_ERROR_OBJECT (this, "Printing list of buffers");
+    while(buffers) {
+      node = (GstOmxBufTabNode *) buffers->data;
+      buffer = node->buffer;
+      GST_DEBUG_OBJECT (this, "Buffer number %u: %p->%p", j, buffer,
+			  buffer->pBuffer);
+	  GST_DEBUG_OBJECT (this, "This buffer is marked as %s ", node->busy ? "Used" : "Free");
+	j++;
+	buffers = g_list_next (buffers);
+    }
     gst_buffer_unref (buf);
     return GST_FLOW_WRONG_STATE;
   }
@@ -561,6 +599,7 @@ noempty:
     GST_ELEMENT_ERROR (this, LIBRARY, ENCODE, (gst_omx_error_to_str (error)),
         (NULL));
     gst_buffer_unref (buf);
+    gst_buffer_unref (buf); /*If Empty this buffer is not succesful we have to unref the buffer manually*/
     return GST_FLOW_ERROR;
   }
 }
@@ -1014,7 +1053,9 @@ gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
     goto nouse;
   }
   *bufferlist = peerpad->buffers->table;
-
+  if(!*bufferlist){
+    g_print("NULL pointer\n");
+  }
   return error;
 
 nouse:
@@ -1031,14 +1072,14 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *buffer = NULL;
-  GList *peerbuffers = NULL;
+  GList *peerbuffers = NULL, *currentbuffer = NULL;
   guint i;
   GstOmxBufferData *bufdata = NULL;
+  GstOmxBufferData *bufdatatemp = NULL;
   guint32 maxsize, size = 0;
   gboolean divided_buffers = FALSE;
   gboolean top_field = TRUE;
   gpointer pbuffer = NULL;
-
 
   if (pad->buffers->table != NULL) {
     GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
@@ -1067,6 +1108,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       error = gst_omx_base_peer_alloc_buffer (this, pad, &pbuffer, &size);
     } else if (GST_PAD_IS_SINK (pad) && data) {
       if (top_field) {
+	currentbuffer = peerbuffers;
         error = gst_omx_base_use_buffer (this, &peerbuffers, &pbuffer, &size);
       } else {
         pbuffer = pbuffer + this->field_offset;
@@ -1076,17 +1118,24 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     if (error != OMX_ErrorNone)
       goto noalloc;
 
-    if (divided_buffers)
-      top_field = !top_field;
 
     bufdata = (GstOmxBufferData *) g_malloc (sizeof (GstOmxBufferData));
     bufdata->pad = pad;
     bufdata->buffer = NULL;
-    bufdata->id = i;
+
+    if(currentbuffer){
+      bufdata->id = ((GstOmxBufferData *)((GstOmxBufTabNode *)currentbuffer->data)->buffer->pAppPrivate)->id +
+	(!top_field)*pad->port->nBufferCountActual; // Ensure bottom fields don't have the same ids as the top
+    } else {
+      bufdata->id = i;
+    }
+
+    if (divided_buffers)
+      top_field = !top_field;
 
     if (pbuffer) {
       GST_DEBUG_OBJECT (this, "Received buffer number %u:"
-          "%p of size %d", i, pbuffer, size);
+          "%p of size %d",  bufdata->id , pbuffer, size);
 
       g_mutex_lock (&_omx_mutex);
       error = OMX_UseBuffer (this->handle, &buffer,
@@ -1094,9 +1143,8 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       g_mutex_unlock (&_omx_mutex);
       if (GST_OMX_FAIL (error))
         goto nouse;
-
       GST_DEBUG_OBJECT (this, "Saved buffer number %u:"
-          "%p->%p", i, buffer, pbuffer);
+          "%p->%p",  bufdata->id , buffer, pbuffer);
       /* No upstream buffer received or pad is a sink, allocate our own */
     } else {
       maxsize = GST_OMX_PAD_PORT (pad)->nBufferSize > this->requested_size ?
@@ -1503,6 +1551,8 @@ gst_omx_base_empty_callback (OMX_HANDLETYPE handle,
 {
   GstOmxBase *this = GST_OMX_BASE (data);
   GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
+  while(!bufdata->buffer){
+	  };
   GstBuffer *gstbuf = bufdata->buffer;
   GstOmxPad *pad = bufdata->pad;
   guint8 id = bufdata->id;
@@ -1519,10 +1569,11 @@ gst_omx_base_empty_callback (OMX_HANDLETYPE handle,
   error = gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
   if (GST_OMX_FAIL (error))
     goto noreturn;
-
+/*
   g_mutex_lock (&this->waitmutex);
   g_cond_signal (&this->waitcond);
   g_mutex_unlock (&this->waitmutex);
+*/
   return error;
 
 noreturn:
