@@ -52,8 +52,8 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("video/x-raw-yuv,"
         "format=(fourcc)YUY2,"
-	"width=[16,1920]," "height=[16,1080]," 
-	"framerate=" GST_VIDEO_FPS_RANGE "," " interlaced={true,false}")
+        "width=[16,1920]," "height=[16,1080],"
+        "framerate=" GST_VIDEO_FPS_RANGE "," " interlaced={true,false}")
     );
 
 enum
@@ -621,8 +621,10 @@ gst_omx_scaler_dynamic_configuration (GstOmxScaler * this,
   resolution.Frm1Pitch = 0;
   resolution.FrmStartX = port->eDir == OMX_DirInput ? this->crop_area.x : 0;
   resolution.FrmStartY = port->eDir == OMX_DirInput ? this->crop_area.y : 0;
-  resolution.FrmCropWidth = port->eDir == OMX_DirInput ? this->crop_area.width : 0;
-  resolution.FrmCropHeight = port->eDir == OMX_DirInput ? this->crop_area.height : 0;
+  resolution.FrmCropWidth =
+      port->eDir == OMX_DirInput ? this->crop_area.width : 0;
+  resolution.FrmCropHeight =
+      port->eDir == OMX_DirInput ? this->crop_area.height : 0;
 
   resolution.eDir = port->eDir;
   resolution.nChId = 0;

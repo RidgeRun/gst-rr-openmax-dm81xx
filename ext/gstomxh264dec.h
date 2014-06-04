@@ -19,7 +19,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
- 
+
 #ifndef __GST_OMX_H264_DEC_H__
 #define __GST_OMX_H264_DEC_H__
 
@@ -28,7 +28,6 @@
 #include "gstomxbase.h"
 
 G_BEGIN_DECLS
-
 #define GST_TYPE_OMX_H264_DEC \
   (gst_omx_h264_dec_get_type())
 #define GST_OMX_H264_DEC(obj) \
@@ -39,23 +38,23 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_H264_DEC))
 #define GST_IS_OMX_H264_DEC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_H264_DEC))
-
-typedef struct _GstOmxH264Dec      GstOmxH264Dec;
+typedef struct _GstOmxH264Dec GstOmxH264Dec;
 typedef struct _GstOmxH264DecClass GstOmxH264DecClass;
 
-struct _GstOmxH264Dec {
+struct _GstOmxH264Dec
+{
   GstOmxBase element;
 
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
 };
 
-struct _GstOmxH264DecClass {
+struct _GstOmxH264DecClass
+{
   GstOmxBaseClass parent_class;
 };
 
 GType gst_omx_h264_dec_get_type (void);
 
 G_END_DECLS
-
 #endif /* __GST_OMX_H264_DEC_H__ */

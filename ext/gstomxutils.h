@@ -28,7 +28,6 @@
 #include <OMX_IVCommon.h>
 
 G_BEGIN_DECLS
-
-OMX_COLOR_FORMATTYPE gst_omx_convert_format_to_omx (GstVideoFormat format);
+    OMX_COLOR_FORMATTYPE gst_omx_convert_format_to_omx (GstVideoFormat format);
 G_END_DECLS
 #endif // __GST_OMX_UTILS_H__

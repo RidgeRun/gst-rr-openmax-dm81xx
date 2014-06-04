@@ -67,7 +67,7 @@ struct _GstOmxBufferData
 {
   GstBuffer *buffer;
   GstOmxPad *pad;
-  guint8 id;
+  guint8 id;                    /*  ID of the buffer used by the buftab  */
 };
 
 #define GST_OMX_INIT_STRUCT(_s_, _name_)	\
