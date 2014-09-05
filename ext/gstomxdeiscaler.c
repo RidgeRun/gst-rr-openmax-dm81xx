@@ -646,7 +646,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   port->nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX;
 
   g_mutex_lock (&_omx_mutex);
-  OMX_GetParameter (base->handle, OMX_IndexParamPortDefinition, &port);
+  OMX_GetParameter (base->handle, OMX_IndexParamPortDefinition, port);
   g_mutex_unlock (&_omx_mutex);
 
   port->nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX;
@@ -691,7 +691,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
     port->nPortIndex = index;
 
     g_mutex_lock (&_omx_mutex);
-    OMX_GetParameter (base->handle, OMX_IndexParamPortDefinition, &port);
+    OMX_GetParameter (base->handle, OMX_IndexParamPortDefinition, port);
     g_mutex_unlock (&_omx_mutex);
 
     port->nPortIndex = index;
