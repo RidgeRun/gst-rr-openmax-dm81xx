@@ -47,8 +47,8 @@
 
 #include "gstomxbasesrc.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_omx_src_base_debug);
-#define GST_CAT_DEFAULT gst_omx_src_base_debug
+GST_DEBUG_CATEGORY_STATIC (gst_omx_base_src_debug);
+#define GST_CAT_DEFAULT gst_omx_base_src_debug
 
 
 #define GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT    8
@@ -60,15 +60,20 @@ enum
   PROP_NUM_OUTPUT_BUFFERS,
 };
 
+
+#define gst_omx_base_src_parent_class parent_class
+static GstBaseSrcClass *parent_class = NULL;
+
+
 static void gst_omx_base_src_base_init (gpointer g_class);
-static void gst_omx_base_class_src_init (GstOmxBaseSrcClass * klass);
+static void gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass);
 static void gst_omx_base_src_init (GstOmxBaseSrc * src, gpointer g_class);
 
 
 GType
 gst_omx_base_src_get_type (void)
 {
-  static volatile gsize omx_base_scr_type = 0;
+  static volatile gsize omx_base_src_type = 0;
 
   if (g_once_init_enter (&omx_base_src_type)) {
     GType _type;
@@ -190,7 +195,7 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_NUM_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "OMX output buffers number",
-          1, 16, GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 16, GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 }
 
 
@@ -214,7 +219,7 @@ static void
 gst_omx_base_src_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstOmxBase *this = GST_OMX_BASE_SRC (object);
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (object);
 
   switch (prop_id) {
     case PROP_PEER_ALLOC:
@@ -236,7 +241,7 @@ static void
 gst_omx_base_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstOmxBase *this = GST_OMX_BASE (object);
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (object);
 
   switch (prop_id) {
     case PROP_PEER_ALLOC:

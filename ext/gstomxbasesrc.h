@@ -25,11 +25,11 @@
 #define __GST_OMX_BASE_SRC_H__
 
 #include "gstomx.h"
-
+#include <gst/base/gstbasesrc.h>
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_BASE_SRC			\
-  (gst_omx_base_get_type())
+  (gst_omx_base_src_get_type())
 #define GST_OMX_BASE_SRC(obj)						\
   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_BASE_SRC,GstOmxBaseSrc))
 #define GST_OMX_BASE_SRC_CLASS(klass)					\
@@ -40,11 +40,11 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_BASE_SRC))
 #define GST_IS_OMX_BASE_SRC_CLASS(klass)				\
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_BASE_SRC))
+
 typedef struct _GstOmxBaseSrc GstOmxBaseSrc;
 typedef struct _GstOmxBaseSrcClass GstOmxBaseSrcClass;
 
-typedef OMX_ERRORTYPE (*GstOmxBasePadFunc) (GstOmxBase *, GstOmxPad *,
-    gpointer);
+typedef OMX_ERRORTYPE (*GstOmxBasePadFunc) (GstOmxBaseSrc *, GstOmxPad *, gpointer);
 
 struct _GstOmxBaseSrc
 {
@@ -57,7 +57,6 @@ struct _GstOmxBaseSrc
   guint32 requested_size;
   guint32 field_offset;
 
-  guint input_buffers;
   guint output_buffers;
 
   gboolean peer_alloc;
@@ -91,7 +90,7 @@ struct _GstOmxBaseSrcClass
 
 };
 
-GType gst_omx_base_get_type (void);
+GType gst_omx_base_src_get_type (void);
 gboolean gst_omx_base_src_add_pad (GstOmxBaseSrc *, GstPad *);
 
 typedef gboolean (*GstOmxBaseSrcCondition) (gpointer, gpointer);
