@@ -25,7 +25,7 @@
 #define __GST_OMX_BASE_SRC_H__
 
 #include "gstomx.h"
-#include <gst/base/gstbasesrc.h>
+#include <gst/base/gstpushsrc.h>
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_BASE_SRC			\
@@ -48,7 +48,7 @@ typedef OMX_ERRORTYPE (*GstOmxBasePadFunc) (GstOmxBaseSrc *, GstOmxPad *, gpoint
 
 struct _GstOmxBaseSrc
 {
-  GstBaseSrc element;
+  GstPushSrc element;
 
   OMX_HANDLETYPE handle;
   OMX_COMPONENTTYPE *component;
