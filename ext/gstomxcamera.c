@@ -23,7 +23,8 @@
 /**
  * SECTION:element-omx_camera
  *
- * Gstreamer H.264/AVC video decoder using OpenMAX IL
+ * omxcamera can be used to capture video from v4l2 devices throught the 
+ * OMX capture component
  *
  * <refsect2>
  * <title>Example launch line</title>
