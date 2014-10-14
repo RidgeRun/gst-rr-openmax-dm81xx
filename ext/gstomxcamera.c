@@ -172,7 +172,8 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps);
+static gboolean gst_omx_camera_set_caps (GstPad * pad, GstCaps * caps);
+static GstCaps *gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
 static GstFlowReturn gst_omx_camera_fill_callback (GstOmxBaseSrc *,
     OMX_BUFFERHEADERTYPE *);
@@ -380,4 +381,38 @@ nosetcaps:
     GST_ERROR_OBJECT (this, "Src pad didn't accept new caps");
     return FALSE;
   }
+}
+
+
+/* Following caps negotiation related functions were taken from the 
+ * omx_camera element code */
+
+/* this function is a bit of a last resort */
+static GstCaps *
+gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
+{
+  GstStructure *structure;
+  gint i;
+
+  GST_DEBUG_OBJECT (basesrc, "fixating caps %" GST_PTR_FORMAT, caps);
+
+  caps = gst_caps_make_writable (caps);
+
+  for (i = 0; i < gst_caps_get_size (caps); ++i) {
+    structure = gst_caps_get_structure (caps, i);
+
+    /* We are fixating to a resonable 320x200 resolution
+       and the maximum framerate resolution for that size */
+    gst_structure_fixate_field_nearest_int (structure, "width", 320);
+    gst_structure_fixate_field_nearest_int (structure, "height", 240);
+    gst_structure_fixate_field_nearest_fraction (structure, "framerate",
+        G_MAXINT, 1);
+    gst_structure_fixate_field (structure, "format");
+  }
+
+  GST_DEBUG_OBJECT (basesrc, "fixated caps %" GST_PTR_FORMAT, caps);
+
+  caps = GST_BASE_SRC_CLASS (parent_class)->fixate (basesrc, caps);
+
+  return caps;
 }
