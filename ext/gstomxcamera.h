@@ -48,6 +48,16 @@ struct _GstOmxCamera
 
   GstPad *srcpad;
   GstOmxFormat format;
+
+  /* properties */
+  gboolean always_copy;
+  gint interface;
+  gint capt_mode;
+  gint vip_mode;
+  gint scan_type;
+  gint num_buffers;
+  guint skip_frames;
+
 };
 
 
