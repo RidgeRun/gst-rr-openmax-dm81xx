@@ -32,6 +32,7 @@
 #include "gstomxh264dec.h"
 #include "gstomxscaler.h"
 #include "gstomxdeiscaler.h"
+#include "gstomxcamera.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -83,6 +84,9 @@ omx_init (GstPlugin * omx)
 
   if (!gst_element_register (omx, "omx_mdeiscaler", GST_RANK_NONE,
           GST_TYPE_OMX_MDEISCALER))
+    return FALSE;
+  if (!gst_element_register (omx, "omx_camera", GST_RANK_NONE,
+          GST_TYPE_OMX_CAMERA))
     return FALSE;
   return TRUE;
 }

@@ -1,7 +1,6 @@
 /*
  * GStreamer
- * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
- * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
+ * Copyright (C) 2014 Melissa Montero <melissa.montero@ridgerun.com>
  * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -42,6 +41,9 @@
 #include <gst/controller/gstcontroller.h>
 #include <gst/video/video.h>
 
+#include "OMX_TI_Common.h"
+#include <omx_vfcc.h>
+#include <OMX_TI_Index.h>
 #include "timm_osal_interfaces.h"
 
 #include "gstomxcamera.h"
@@ -61,9 +63,11 @@ enum
   PROP_SKIP_FRAMES
 };
 
+#define PADX 32
+#define PADY 24
 
 #define gst_omx_camera_parent_class parent_class
-static GstOmxBaseSrcClass *parent_class = NULL;
+G_DEFINE_TYPE (GstOmxCamera, gst_omx_camera, GST_TYPE_OMX_BASE_SRC);
 
 /*
  * Caps:
@@ -90,6 +94,7 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
 
 /* Properties enumerates */
 #define GST_OMX_CAMERA_INTERFACE_TYPE (gst_omx_camera_interface_get_type())
+
 static GType
 gst_omx_camera_interface_get_type (void)
 {
@@ -172,21 +177,19 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_omx_camera_set_caps (GstPad * pad, GstCaps * caps);
+static gboolean gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps);
 static GstCaps *gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
-static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
-static GstFlowReturn gst_omx_camera_fill_callback (GstOmxBaseSrc *,
-    OMX_BUFFERHEADERTYPE *);
+//static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
+//static GstFlowReturn gst_omx_camera_fill_callback (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
 
 
 static void
-gst_omx_camera_class_init (GstOMXCameraClass * klass)
+gst_omx_camera_class_init (GstOmxCameraClass * klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+ GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
-  GstPushSrcClass *pushsrc_class = GST_PUSH_SRC_CLASS (klass);
+  GstBaseSrcClass *base_src_class = GST_BASE_SRC_CLASS (klass);
   GstOmxBaseSrcClass *baseomxsrc_class = GST_OMX_BASE_SRC_CLASS (klass);
-
   gobject_class->set_property = gst_omx_camera_set_property;
   gobject_class->get_property = gst_omx_camera_get_property;
 
@@ -224,7 +227,7 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
           "Skip this amount of frames after a vaild frame",
           0, 30, PROP_SKIP_FRAMES_DEFAULT, G_PARAM_READWRITE));
 
-  element_class->change_state = gst_omx_camera_change_state;
+  //element_class->change_state = gst_omx_camera_change_state;
 
 
   gst_element_class_set_details_simple (element_class,
@@ -238,7 +241,8 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_template));
 
-  baseomxsrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
+  base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
+  base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
   //  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
   // baseomxsrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_omx_camera_negotiate);
   // pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
@@ -407,12 +411,85 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
     gst_structure_fixate_field_nearest_int (structure, "height", 240);
     gst_structure_fixate_field_nearest_fraction (structure, "framerate",
         G_MAXINT, 1);
-    gst_structure_fixate_field (structure, "format");
+    //    gst_structure_fixate_field (structure, "format");
   }
 
   GST_DEBUG_OBJECT (basesrc, "fixated caps %" GST_PTR_FORMAT, caps);
 
-  caps = GST_BASE_SRC_CLASS (parent_class)->fixate (basesrc, caps);
-
+   GST_BASE_SRC_CLASS (parent_class)->fixate (basesrc, caps);
   return caps;
+}
+
+
+static void
+gst_omx_camera_set_property (GObject * object,
+    guint prop_id, const GValue * value, GParamSpec * pspec)
+{
+  GstOmxCamera *self = GST_OMX_CAMERA (object);
+
+  switch (prop_id) {
+    case PROP_INTERFACE:
+      self->interface = g_value_get_enum (value);
+      break;
+    case PROP_CAPT_MODE:
+      self->capt_mode = g_value_get_enum (value);
+      break;
+    case PROP_VIP_MODE:
+      self->vip_mode = g_value_get_enum (value);
+      break;
+    case PROP_SCAN_TYPE:
+      self->scan_type = g_value_get_enum (value);
+      break;
+    case PROP_ALWAYS_COPY:
+      self->always_copy = g_value_get_boolean (value);
+      break;
+    case PROP_NUM_OUT_BUFFERS:
+      self->num_buffers = g_value_get_uint (value);
+      break;
+    case PROP_SKIP_FRAMES:
+      self->skip_frames = g_value_get_uint (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+
+}
+
+static void
+gst_omx_camera_get_property (GObject * object,
+    guint prop_id, GValue * value, GParamSpec * pspec)
+{
+
+  GstOmxCamera *self = GST_OMX_CAMERA (object);
+  OMX_ERRORTYPE err;
+
+  switch (prop_id) {
+    case PROP_INTERFACE:
+      g_value_set_enum (value, self->interface);
+      break;
+    case PROP_CAPT_MODE:
+      g_value_set_enum (value, self->capt_mode);
+      break;
+    case PROP_VIP_MODE:
+      g_value_set_enum (value, self->vip_mode);
+      break;
+    case PROP_SCAN_TYPE:
+      g_value_set_enum (value, self->scan_type);
+      break;
+    case PROP_ALWAYS_COPY:
+      g_value_set_boolean (value, self->always_copy);
+      break;
+    case PROP_NUM_OUT_BUFFERS:
+      g_value_set_uint (value, self->num_buffers);
+      break;
+    case PROP_SKIP_FRAMES:
+    {
+      break;
+    }
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+
 }

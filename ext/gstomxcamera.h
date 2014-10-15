@@ -1,7 +1,6 @@
 /* 
  * GStreamer
- * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
- * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
+ * Copyright (C) 2014 Melissa Montero <melissa.montero@ridgerun.com>
  * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com> 
  *
  * This library is free software; you can redistribute it and/or

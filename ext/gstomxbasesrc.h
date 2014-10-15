@@ -44,7 +44,7 @@ G_BEGIN_DECLS
 typedef struct _GstOmxBaseSrc GstOmxBaseSrc;
 typedef struct _GstOmxBaseSrcClass GstOmxBaseSrcClass;
 
-typedef OMX_ERRORTYPE (*GstOmxBasePadFunc) (GstOmxBaseSrc *, GstOmxPad *, gpointer);
+typedef OMX_ERRORTYPE (*GstOmxBaseSrcPadFunc) (GstOmxBaseSrc *, GstOmxPad *, gpointer);
 
 struct _GstOmxBaseSrc
 {
@@ -76,7 +76,7 @@ struct _GstOmxBaseSrc
 
 struct _GstOmxBaseSrcClass
 {
-  GstBaseSrcClass parent_class;
+  GstPushSrcClass parent_class;
 
   gchar *handle_name;
   

@@ -1,7 +1,6 @@
 /*
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
- * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
  * Copyright (C) 2014 Melissa Montero <melissa.montero@ridgerun.com>
  * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
  * Copyright (C) 2014 Ronny Jimenez <ronny.jimenez@ridgerun.com>
@@ -89,7 +88,7 @@ gst_omx_base_src_get_type (void)
       (GInstanceInitFunc) gst_omx_base_src_init,
     };
 
-    _type = g_type_register_static (GST_TYPE_ELEMENT,
+    _type = g_type_register_static (GST_TYPE_PUSH_SRC,
         "GstOmxBaseSrc", &omx_base_src_info, G_TYPE_FLAG_ABSTRACT);
     g_once_init_leave (&omx_base_src_type, _type);
   }
@@ -123,7 +122,7 @@ static void
 gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
 {
   GstOmxBaseSrcClass *klass = GST_OMX_BASE_SRC_CLASS (g_class);
-  OMX_ERRORTYPE error;
+  //OMX_ERRORTYPE error;
 
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
@@ -142,11 +141,11 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
 
-  error = gst_omx_base_src_allocate_omx (this, klass->handle_name);
+  /*  error = gst_omx_base_src_allocate_omx (this, klass->handle_name);
   if (GST_OMX_FAIL (error)) {
     GST_ELEMENT_ERROR (this, LIBRARY,
         INIT, (gst_omx_error_to_str (error)), (NULL));
-  }
+	}*/
 }
 
 
@@ -207,7 +206,7 @@ gst_omx_base_src_finalize (GObject * object)
   GST_INFO_OBJECT (this, "Finalizing %s", GST_OBJECT_NAME (this));
 
   g_list_free_full (this->pads, gst_object_unref);
-  gst_omx_base_src_free_omx (this);
+  //  gst_omx_base_src_free_omx (this);
 
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -238,7 +237,7 @@ gst_omx_base_src_set_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_omx_base_get_property (GObject * object, guint prop_id,
+gst_omx_base_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
   GstOmxBaseSrc *this = GST_OMX_BASE_SRC (object);
@@ -256,14 +255,14 @@ gst_omx_base_get_property (GObject * object, guint prop_id,
   }
 }
 
-
+/*
 static OMX_ERRORTYPE
 gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_PORT_PARAM_TYPE init;
 
-  GST_INFO_OBJECT (this, "Allocating OMX resources for %s", handle_name);
+    GST_INFO_OBJECT (this, "Allocating OMX resources for %s", handle_name);
 
   this->callbacks = TIMM_OSAL_Malloc (sizeof (OMX_CALLBACKTYPE),
       TIMM_OSAL_TRUE, 0, TIMMOSAL_MEM_SEGMENT_EXT);
@@ -288,7 +287,7 @@ gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name)
     goto nohandle;
 
   this->component = (OMX_COMPONENTTYPE *) this->handle;
-  /*
+  
   GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
   init.nPorts = 1;
   init.nStartPortNumber = 0;
@@ -297,9 +296,9 @@ gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name)
   g_mutex_unlock (&_omx_mutex);
   if (error != OMX_ErrorNone)
     goto initport;
-  */
+  
   return error;
-
+  
 noresources:
   {
     GST_ERROR_OBJECT (this, "Insufficient OMX memory resources");
@@ -316,8 +315,8 @@ nohandle:
         gst_omx_error_to_str (error));
     return error;
   }
-
-}
+  
+  }*/
 
 
 static GstStateChangeReturn
@@ -332,7 +331,7 @@ gst_omx_base_src_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_READY_TO_NULL:
-      gst_omx_base_src_stop (this);
+      //  gst_omx_base_src_stop (this);
       break;
     default:
       break;
