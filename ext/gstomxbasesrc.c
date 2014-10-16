@@ -339,3 +339,23 @@ gst_omx_base_src_change_state (GstElement * element, GstStateChange transition)
 
   return ret;
 }
+
+gboolean
+gst_omx_base_src_add_pad (GstOmxBaseSrc * this, GstPad * pad)
+{
+  GST_INFO_OBJECT (this, "Adding pad %s:%s", GST_DEBUG_PAD_NAME (pad));
+
+  /* if (GST_PAD_SINK == GST_PAD_DIRECTION (pad)) {
+    gst_pad_set_chain_function (pad, GST_DEBUG_FUNCPTR (gst_omx_base_chain));
+    gst_pad_set_event_function (pad,
+        GST_DEBUG_FUNCPTR (gst_omx_base_event_handler));
+    gst_pad_set_setcaps_function (pad,
+        GST_DEBUG_FUNCPTR (gst_omx_base_set_caps));
+    gst_pad_set_bufferalloc_function (pad, gst_omx_base_alloc_buffer);
+    }*/
+
+  gst_object_ref (pad);
+  this->pads = g_list_append (this->pads, pad);
+
+  return TRUE;
+}

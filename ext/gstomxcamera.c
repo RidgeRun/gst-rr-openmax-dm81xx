@@ -242,7 +242,7 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
       gst_static_pad_template_get (&src_template));
 
   base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
-  base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
+  //base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
   //  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
   // baseomxsrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_omx_camera_negotiate);
   // pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
@@ -262,6 +262,12 @@ gst_omx_camera_init (GstOmxCamera *this)
   //  self->started = FALSE;
   //self->sharing = FALSE;
   this->srcpad = NULL;
+ this->srcpad =
+      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
+          (&src_template), "src"));
+  gst_pad_set_active (this->srcpad, TRUE);
+  gst_omx_base_src_add_pad (GST_OMX_BASE_SRC (this), this->srcpad);
+  gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
 
   /* Initialize properties */
   this->interface = PROP_INTERFACE_DEFAULT;
