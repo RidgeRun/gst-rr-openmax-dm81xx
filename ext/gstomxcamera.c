@@ -66,6 +66,9 @@ enum
 #define PADX 32
 #define PADY 24
 
+#define GSTOMX_ALL_FORMATS  "{ NV12, I420, YUY2, UYVY }"
+
+
 #define gst_omx_camera_parent_class parent_class
 G_DEFINE_TYPE (GstOmxCamera, gst_omx_camera, GST_TYPE_OMX_BASE_SRC);
 
@@ -75,10 +78,8 @@ G_DEFINE_TYPE (GstOmxCamera, gst_omx_camera, GST_TYPE_OMX_BASE_SRC);
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw, "
-        "format = (string) {YUY2, NV12}, "
-        "width = (int) [ 16, 1920 ], "
-        "height = (int) [ 16, 1080 ] , " "framerate = " GST_VIDEO_FPS_RANGE)
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV_STRIDED (GSTOMX_ALL_FORMATS,
+            "[ 0, max ]"))
     );
 
 #define MAX_SHIFTS	30
@@ -178,7 +179,7 @@ static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
 static gboolean gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps);
-static GstCaps *gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
+static void gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
 //static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
 //static GstFlowReturn gst_omx_camera_fill_callback (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
 
@@ -242,7 +243,7 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
       gst_static_pad_template_get (&src_template));
 
   base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
-  //base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
+  base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
   //  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
   // baseomxsrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_omx_camera_negotiate);
   // pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
@@ -261,14 +262,14 @@ gst_omx_camera_init (GstOmxCamera *this)
 
   //  self->started = FALSE;
   //self->sharing = FALSE;
-  this->srcpad = NULL;
- this->srcpad =
-      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
+  
+ this->srcpad = GST_BASE_SRC_PAD (this);
+ /*      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
-  gst_pad_set_active (this->srcpad, TRUE);
+ GST_PAD(this->srcpad) =  GST_BASE_SRC_PAD (this); 
+ gst_pad_set_active (this->srcpad, TRUE);
   gst_omx_base_src_add_pad (GST_OMX_BASE_SRC (this), this->srcpad);
-  gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
-
+ */
   /* Initialize properties */
   this->interface = PROP_INTERFACE_DEFAULT;
   this->capt_mode = PROP_CAPT_MODE_DEFAULT;
@@ -285,8 +286,6 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
   GstOmxCamera *this = GST_OMX_CAMERA (src);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
-
-  //GstVideoInfo info;
   gchar *caps_str = NULL;
 
 
@@ -295,14 +294,6 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   GstCaps *newcaps = NULL;
   GValue stride = { 0, };
   GValue interlaced = { 0, };
-
-  gboolean needs_disable = FALSE;
-
-  /*  needs_disable =
-      gst_omx_component_get_state (self->comp,
-      GST_CLOCK_TIME_NONE) != OMX_StateLoaded;
-  */
-
 
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
@@ -329,7 +320,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
     goto invalidcaps;
   }
 
-  /* This is always fixed */
+  /* This is fixed for testing with NV12*/
   this->format.format = GST_VIDEO_FORMAT_NV12;
   /* The right value is set with interlaced flag on output omx buffers */
   this->format.interlaced = FALSE;
@@ -349,6 +340,9 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   /* Ask for the output caps, if not fixed then try the biggest frame */
   allowedcaps = gst_pad_get_allowed_caps (this->srcpad);
+
+  GST_DEBUG_OBJECT (this, "allowed caps: %s", gst_caps_to_string (allowedcaps));
+
   newcaps = gst_caps_make_writable (gst_caps_copy_nth (allowedcaps, 0));
   srcstructure = gst_caps_get_structure (newcaps, 0);
   gst_caps_unref (allowedcaps);
@@ -360,6 +354,8 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
       this->format.width);
   gst_structure_fixate_field_nearest_int (srcstructure, "height",
       this->format.height);
+  gst_structure_set (srcstructure, "format", GST_TYPE_FOURCC, 
+      gst_video_format_to_fourcc (this->format.format), NULL);
 
   gst_structure_get_int (srcstructure, "width", &this->format.width);
   gst_structure_get_int (srcstructure, "height", &this->format.height);
@@ -398,17 +394,19 @@ nosetcaps:
  * omx_camera element code */
 
 /* this function is a bit of a last resort */
-static GstCaps *
+static void
 gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
 {
   GstStructure *structure;
+  guint32 format;
   gint i;
+  guint32 fourcc;
 
   GST_DEBUG_OBJECT (basesrc, "fixating caps %" GST_PTR_FORMAT, caps);
-
   caps = gst_caps_make_writable (caps);
-
   for (i = 0; i < gst_caps_get_size (caps); ++i) {
+    const GValue *v;
+    
     structure = gst_caps_get_structure (caps, i);
 
     /* We are fixating to a resonable 320x200 resolution
@@ -417,13 +415,20 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
     gst_structure_fixate_field_nearest_int (structure, "height", 240);
     gst_structure_fixate_field_nearest_fraction (structure, "framerate",
         G_MAXINT, 1);
-    //    gst_structure_fixate_field (structure, "format");
+
+    v = gst_structure_get_value (structure, "format");
+    if (v && G_VALUE_TYPE (v) != GST_TYPE_FOURCC) {
+      guint32 fourcc;
+      
+      g_return_if_fail (G_VALUE_TYPE (v) == GST_TYPE_LIST);
+      
+      fourcc = gst_value_get_fourcc (gst_value_list_get_value (v, 0));
+      gst_structure_set (structure, "format", GST_TYPE_FOURCC, fourcc, NULL);
+    }
   }
 
   GST_DEBUG_OBJECT (basesrc, "fixated caps %" GST_PTR_FORMAT, caps);
 
-   GST_BASE_SRC_CLASS (parent_class)->fixate (basesrc, caps);
-  return caps;
 }
 
 
