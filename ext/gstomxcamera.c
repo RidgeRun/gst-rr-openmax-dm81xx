@@ -260,16 +260,37 @@ gst_omx_camera_init (GstOmxCamera *this)
   gst_base_src_set_format (GST_BASE_SRC (this), GST_FORMAT_TIME);
   gst_base_src_set_live (GST_BASE_SRC (this), TRUE);
 
-  //  self->started = FALSE;
-  //self->sharing = FALSE;
+  /* WARNING: Ugly hack follows 
+   * Since the element pad needs to be a OmxPad, we need to overwrite 
+   * the basesrc default pad with our new one to handle memory managment
+   * in the same way is handled on the other omx elements.
+   */
+
+  GstPad *basesrcpad= (GstPad *) g_object_ref(GST_BASE_SRC(this)->srcpad);
   
- this->srcpad = GST_BASE_SRC_PAD (this);
- /*      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
+  GST_DEBUG_OBJECT (this, "creating src pad");
+  gst_pad_set_active (basesrcpad, FALSE);
+  this->srcpad = GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
- GST_PAD(this->srcpad) =  GST_BASE_SRC_PAD (this); 
- gst_pad_set_active (this->srcpad, TRUE);
+ 
+  GST_DEBUG_OBJECT (this, "setting functions on src pad");
+
+  gst_pad_set_activatepush_function (this->srcpad, GST_PAD_ACTIVATEPUSHFUNC(basesrcpad));
+  gst_pad_set_activatepull_function (this->srcpad, GST_PAD_ACTIVATEPULLFUNC(basesrcpad));
+  gst_pad_set_event_function (this->srcpad, GST_PAD_EVENTFUNC(basesrcpad));
+  gst_pad_set_query_function(this->srcpad, GST_PAD_QUERYFUNC(basesrcpad));
+  gst_pad_set_checkgetrange_function (this->srcpad, GST_PAD_CHECKGETRANGEFUNC(basesrcpad) );
+  gst_pad_set_getrange_function (this->srcpad, GST_PAD_GETRANGEFUNC(basesrcpad));
+  gst_pad_set_getcaps_function (this->srcpad, GST_PAD_GETCAPSFUNC(basesrcpad));
+  gst_pad_set_setcaps_function (this->srcpad,  GST_PAD_SETCAPSFUNC(basesrcpad));
+  gst_pad_set_fixatecaps_function (this->srcpad, GST_PAD_FIXATECAPSFUNC(basesrcpad));
+  gst_element_remove_pad (GST_ELEMENT (this), basesrcpad); 
+
+  g_object_unref ( basesrcpad );
+     GST_BASE_SRC_PAD(this) = this->srcpad ;
+  gst_element_add_pad (GST_ELEMENT (this),  this->srcpad);
   gst_omx_base_src_add_pad (GST_OMX_BASE_SRC (this), this->srcpad);
- */
+  
   /* Initialize properties */
   this->interface = PROP_INTERFACE_DEFAULT;
   this->capt_mode = PROP_CAPT_MODE_DEFAULT;
