@@ -724,7 +724,7 @@ gst_omx_camera_set_skip_frames (GstOmxCamera * this)
   skip_frames.frameSkipMask = skip;
   g_mutex_lock (&_omx_mutex);
   err =
-    OMX_SetParameter (base->handle, OMX_TI_IndexConfigVFCCFrameSkip, &skip_frames);
+      OMX_SetConfig (base->handle, OMX_TI_IndexConfigVFCCFrameSkip, &skip_frames);
   g_mutex_unlock (&_omx_mutex);
 
   if (err != OMX_ErrorNone)
