@@ -84,9 +84,6 @@ struct _GstOmxBaseSrcClass
 				guint32, gpointer);
   GstFlowReturn (*omx_fill_buffer) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
   GstFlowReturn (*omx_empty_buffer) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
-  OMX_ERRORTYPE (*init_ports) (GstOmxBaseSrc *);
-  gboolean (*parse_caps) (GstPad *, GstCaps *);
-  GstCaps *(*parse_buffer) (GstOmxBaseSrc *, GstBuffer *);
 
 };
 

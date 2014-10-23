@@ -46,6 +46,7 @@
 #include <OMX_TI_Index.h>
 #include "timm_osal_interfaces.h"
 
+#include "gstomxutils.h"
 #include "gstomxcamera.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_omx_camera_debug);
@@ -177,10 +178,11 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-
 static gboolean gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps);
 static void gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
-//static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
+static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * this);
+static GstFlowReturn gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf);
+static void gst_omx_camera_set_skip_frames (GstOmxCamera * this);
 //static GstFlowReturn gst_omx_camera_fill_callback (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
 
 
@@ -308,7 +310,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   GstOmxCamera *this = GST_OMX_CAMERA (src);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
   gchar *caps_str = NULL;
-
+  OMX_ERRORTYPE error = OMX_ErrorNone;
 
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
@@ -396,8 +398,12 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  error = gst_omx_camera_init_pads (GST_OMX_BASE_SRC(this));
+  if (GST_OMX_FAIL (error))
+    goto nopads;
+  
   return TRUE;
-
+ 
 invalidcaps:
   {
     GST_ERROR_OBJECT (this, "Unable to grab stream format from caps");
@@ -408,8 +414,13 @@ nosetcaps:
     GST_ERROR_OBJECT (this, "Src pad didn't accept new caps");
     return FALSE;
   }
+nopads:
+  {
+    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
+  }
 }
-
 
 /* Following caps negotiation related functions were taken from the 
  * omx_camera element code */
@@ -430,10 +441,10 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
     
     structure = gst_caps_get_structure (caps, i);
 
-    /* We are fixating to a resonable 320x200 resolution
+    /* We are fixating to 1920x1080 resolution
        and the maximum framerate resolution for that size */
-    gst_structure_fixate_field_nearest_int (structure, "width", 320);
-    gst_structure_fixate_field_nearest_int (structure, "height", 240);
+    gst_structure_fixate_field_nearest_int (structure, "width", 1920);
+    gst_structure_fixate_field_nearest_int (structure, "height", 1080);
     gst_structure_fixate_field_nearest_fraction (structure, "framerate",
         G_MAXINT, 1);
 
@@ -457,29 +468,29 @@ static void
 gst_omx_camera_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec)
 {
-  GstOmxCamera *self = GST_OMX_CAMERA (object);
+  GstOmxCamera *this = GST_OMX_CAMERA (object);
 
   switch (prop_id) {
     case PROP_INTERFACE:
-      self->interface = g_value_get_enum (value);
+      this->interface = g_value_get_enum (value);
       break;
     case PROP_CAPT_MODE:
-      self->capt_mode = g_value_get_enum (value);
+      this->capt_mode = g_value_get_enum (value);
       break;
     case PROP_VIP_MODE:
-      self->vip_mode = g_value_get_enum (value);
+      this->vip_mode = g_value_get_enum (value);
       break;
     case PROP_SCAN_TYPE:
-      self->scan_type = g_value_get_enum (value);
+      this->scan_type = g_value_get_enum (value);
       break;
     case PROP_ALWAYS_COPY:
-      self->always_copy = g_value_get_boolean (value);
+      this->always_copy = g_value_get_boolean (value);
       break;
     case PROP_NUM_OUT_BUFFERS:
-      self->num_buffers = g_value_get_uint (value);
+      this->num_buffers = g_value_get_uint (value);
       break;
     case PROP_SKIP_FRAMES:
-      self->skip_frames = g_value_get_uint (value);
+      this->skip_frames = g_value_get_uint (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -490,30 +501,29 @@ gst_omx_camera_set_property (GObject * object,
 
 static void
 gst_omx_camera_get_property (GObject * object,
-    guint prop_id, GValue * value, GParamSpec * pspec)
-{
+    guint prop_id, GValue * value, GParamSpec * pspec){
 
-  GstOmxCamera *self = GST_OMX_CAMERA (object);
-  OMX_ERRORTYPE err;
+  GstOmxCamera *this = GST_OMX_CAMERA (object);
+  //  OMX_ERRORTYPE err;
 
   switch (prop_id) {
     case PROP_INTERFACE:
-      g_value_set_enum (value, self->interface);
+      g_value_set_enum (value, this->interface);
       break;
     case PROP_CAPT_MODE:
-      g_value_set_enum (value, self->capt_mode);
+      g_value_set_enum (value, this->capt_mode);
       break;
     case PROP_VIP_MODE:
-      g_value_set_enum (value, self->vip_mode);
+      g_value_set_enum (value, this->vip_mode);
       break;
     case PROP_SCAN_TYPE:
-      g_value_set_enum (value, self->scan_type);
+      g_value_set_enum (value, this->scan_type);
       break;
     case PROP_ALWAYS_COPY:
-      g_value_set_boolean (value, self->always_copy);
+      g_value_set_boolean (value, this->always_copy);
       break;
     case PROP_NUM_OUT_BUFFERS:
-      g_value_set_uint (value, self->num_buffers);
+      g_value_set_uint (value, this->num_buffers);
       break;
     case PROP_SKIP_FRAMES:
     {
@@ -523,5 +533,363 @@ gst_omx_camera_get_property (GObject * object,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-
 }
+
+
+static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * base)
+{
+  GstOmxCamera *this = GST_OMX_CAMERA (base);
+  OMX_PARAM_PORTDEFINITIONTYPE *port = NULL;
+  OMX_PARAM_BUFFER_MEMORYTYPE memory;
+  OMX_PARAM_VFCC_HWPORT_PROPERTIES hw_port_param;
+  OMX_PARAM_VFCC_HWPORT_ID hw_port;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  gchar *portname = NULL;
+
+
+  GST_DEBUG_OBJECT (this, "Initializing  output port memory");
+  GST_OMX_INIT_STRUCT (&memory, OMX_PARAM_BUFFER_MEMORYTYPE);
+  memory.nPortIndex = OMX_VFCC_OUTPUT_PORT_START_INDEX;
+  memory.eBufMemoryType = OMX_BUFFER_MEMORY_DEFAULT;
+  g_mutex_lock (&_omx_mutex);
+
+  GST_DEBUG_OBJECT (this, "Memory type: %d", memory.eBufMemoryType);
+
+  error =
+      OMX_SetParameter (base->handle, OMX_TI_IndexParamBuffMemType, &memory);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error)) {
+    portname = "output";
+    goto noport;
+  }
+
+  GST_DEBUG_OBJECT (this, "Initializing src pad port");
+  port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->srcpad));
+  GST_OMX_INIT_STRUCT (port, OMX_PARAM_PORTDEFINITIONTYPE);
+
+  port->nPortIndex = OMX_VFCC_OUTPUT_PORT_START_INDEX;;
+  port->nBufferCountActual = base->output_buffers;
+  port->format.video.nFrameWidth = this->format.width;
+  port->format.video.nFrameHeight = this->format.height_padded;
+  port->format.video.nStride = this->format.width_padded;
+  port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
+  port->format.video.eColorFormat = gst_omx_convert_format_to_omx (this->format.format);
+
+ if (port->format.video.eColorFormat == OMX_COLOR_FormatUnused) {
+   //GST_ERROR_OBJECT (this, "Unsupported format %s",
+   //		      gst_video_format_to_string (this->format.format));
+   GST_ERROR_OBJECT (this, "Unsupported format ");
+  }
+ 
+ port->nBufferSize = gst_omx_camera_get_buffer_size(this->format.format,this->format.width_padded,this->format.height_padded);
+
+  GST_DEBUG_OBJECT (this,
+      "width= %li, height=%li, stride=%li, format %d, buffersize %li",
+      port->format.video.nFrameWidth, port->format.video.nFrameHeight,
+      port->format.video.nStride,  port->format.video.eColorFormat,
+      port->nBufferSize);
+
+
+  g_mutex_lock (&_omx_mutex);
+  error =
+    OMX_SetParameter (GST_OMX_BASE_SRC(this)->handle,
+      OMX_IndexParamPortDefinition, port);
+  g_mutex_unlock (&_omx_mutex);
+  if (error != OMX_ErrorNone) {
+    portname = "output";
+    goto noport;
+  }
+
+ GST_DEBUG_OBJECT (this, "Initializing  capture interface");
+
+  GST_OMX_INIT_STRUCT (&hw_port, OMX_PARAM_VFCC_HWPORT_ID);
+ /* Set capture interface */
+  hw_port.eHwPortId = this->interface;  
+  g_mutex_lock (&_omx_mutex);
+  error =
+    OMX_SetParameter (GST_OMX_BASE_SRC(this)->handle,
+			OMX_TI_IndexParamVFCCHwPortID, &hw_port);
+  g_mutex_unlock (&_omx_mutex);
+  if (error != OMX_ErrorNone) {
+    portname = "output";
+    goto noport;
+  }
+
+
+  GST_DEBUG_OBJECT (this, "Hardware port id: %d", hw_port.eHwPortId);
+
+  GST_OMX_INIT_STRUCT (&hw_port_param, OMX_PARAM_VFCC_HWPORT_PROPERTIES);
+  hw_port_param.eCaptMode = this->capt_mode;
+  hw_port_param.eVifMode = this->vip_mode;
+  hw_port_param.eInColorFormat = OMX_COLOR_FormatYCbYCr;
+  hw_port_param.eScanType = this->scan_type;
+  hw_port_param.nMaxHeight =  this->format.height_padded;
+  hw_port_param.nMaxWidth = this->format.width;
+  hw_port_param.nMaxChnlsPerHwPort = 1;
+  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced)
+    hw_port_param.nMaxHeight = hw_port_param.nMaxHeight >> 1;
+
+
+GST_DEBUG_OBJECT (this,
+      "Hw port properties: capture mode %d, vif mode %d, max height %li, max width %li, max channel %li, scan type %d, format %d",
+      hw_port_param.eCaptMode, hw_port_param.eVifMode, hw_port_param.nMaxHeight,
+      hw_port_param.nMaxWidth, hw_port_param.nMaxChnlsPerHwPort,
+      hw_port_param.eScanType, hw_port_param.eInColorFormat);
+
+  g_mutex_lock (&_omx_mutex);
+  error =
+    OMX_SetParameter (base->handle, OMX_TI_IndexParamVFCCHwPortProperties, &hw_port_param);
+  g_mutex_unlock (&_omx_mutex);
+
+  if (GST_OMX_FAIL (error)) {
+    portname = "output";
+    goto noport;
+  }
+
+
+   gst_omx_camera_set_skip_frames (this);
+   /*
+  this->duration = gst_util_uint64_scale_int (GST_SECOND,
+      GST_VIDEO_INFO_FPS_D (info), GST_VIDEO_INFO_FPS_N (info));
+      */
+  return error;
+
+noport:
+  {
+    GST_ERROR_OBJECT (this, "Failed to set %s port parameters", portname);
+    return error;
+  }
+
+noenable:
+  {
+    GST_ERROR_OBJECT (this, "Failed to enable omx_camera");
+    return error;
+  }
+}
+
+
+gint
+gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
+{
+  gint buffer_size;
+
+  switch (format) {
+    case GST_VIDEO_FORMAT_YUY2:
+      buffer_size = stride * height;
+      break;
+    case GST_VIDEO_FORMAT_I420:
+      buffer_size = stride * height + 2 * ((stride >> 1) * ((height + 1) >> 2));
+      break;
+    case GST_VIDEO_FORMAT_NV12:
+      buffer_size = (stride * height * 3) >> 1;
+      break;
+    default:
+      buffer_size = 0;
+      break;
+  }
+  return buffer_size;
+}
+
+
+static void
+gst_omx_camera_set_skip_frames (GstOmxCamera * this)
+{
+  OMX_ERRORTYPE err;
+  GstOmxBaseSrc *base = GST_OMX_BASE_SRC(this);
+  OMX_CONFIG_VFCC_FRAMESKIP_INFO skip_frames;
+  guint32 shifts = 0, skip = 0, i = 0, count = 0;
+  shifts = this->skip_frames;
+
+  if (shifts) {
+    while (count < MAX_SHIFTS) {
+      if ((count + shifts) > MAX_SHIFTS)
+        shifts = MAX_SHIFTS - count;
+
+      for (i = 0; i < shifts; i++) {
+        skip = (skip << 1) | 1;
+        count++;
+      }
+
+      if (count < MAX_SHIFTS) {
+        skip = skip << 1;
+        count++;
+      }
+    }
+  }
+
+  GST_OMX_INIT_STRUCT (&skip_frames,OMX_CONFIG_VFCC_FRAMESKIP_INFO);
+  /* OMX_TI_IndexConfigVFCCFrameSkip is for dropping frames in capture,
+     it is a binary 30bit value where 1 means drop a frame and 0
+     process the frame */
+  skip_frames.frameSkipMask = skip;
+  g_mutex_lock (&_omx_mutex);
+  err =
+    OMX_SetParameter (base->handle, OMX_TI_IndexConfigVFCCFrameSkip, &skip_frames);
+  g_mutex_unlock (&_omx_mutex);
+
+  if (err != OMX_ErrorNone)
+    GST_WARNING_OBJECT (this,
+        "Failed to set capture skip frames to %d: %s (0x%08x)", shifts,
+        gst_omx_error_to_str (err), err);
+
+  return;
+}
+
+/*
+static GstFlowReturn
+gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
+{
+  
+  GstFlowReturn ret;
+  GstOMXCamera *self = GST_OMX_CAMERA (src);
+  GstFlowReturn ret;
+  GstClock *clock;
+  GstClockTime abs_time, base_time, timestamp, duration; 
+  
+
+  GST_OBJECT_LOCK (self);
+  if ((clock = GST_ELEMENT_CLOCK (self))) {
+    //we have a clock, get base time and ref clock 
+    base_time = GST_ELEMENT (self)->base_time;
+    abs_time = gst_clock_get_time (clock);
+  } else {
+    // no clock, can't set timestamps 
+    base_time = GST_CLOCK_TIME_NONE;
+    abs_time = GST_CLOCK_TIME_NONE;
+  }
+  GST_OBJECT_UNLOCK (self);
+
+  ret = gst_omx_camera_get_buffer (self, buf);
+  if (G_UNLIKELY (ret != GST_FLOW_OK))
+    goto error;
+
+  return ret;
+}
+
+
+
+static GstFlowReturn
+gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
+{
+  GstOMXPort *port = self->outport;
+  GstOMXBuffer *buf = NULL;
+  GstOMXAcquireBufferReturn acq_return;
+  OMX_ERRORTYPE err;
+  GstBufferPool *pool = self->outpool;
+  GstFlowReturn flow_ret;
+
+  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
+    goto component_error;
+  } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
+    goto flushing;
+  } else if (acq_return != GST_OMX_ACQUIRE_BUFFER_OK) {
+    return GST_FLOW_ERROR;
+  }
+
+  if (gst_omx_port_is_flushing (port)) {
+    GST_DEBUG_OBJECT (self, "Flushing");
+    gst_omx_port_release_buffer (port, buf);
+    goto flushing;
+  }
+
+  GST_LOG_OBJECT (self, "Handling buffer: 0x%08x %" G_GUINT64_FORMAT,
+      (guint) buf->omx_buf->nFlags, (guint64) buf->omx_buf->nTimeStamp);
+
+  buf->omx_buf->nFilledLen = self->imagesize;
+  if (buf->omx_buf->nFilledLen > 0) {
+    GstMapInfo map = GST_MAP_INFO_INIT;
+
+    GST_LOG_OBJECT (self, "Handling output data");
+
+    if (self->always_copy) {
+      *outbuf = gst_buffer_new_and_alloc (buf->omx_buf->nFilledLen);
+
+      gst_buffer_map (*outbuf, &map, GST_MAP_WRITE);
+      memcpy (map.data,
+          buf->omx_buf->pBuffer + buf->omx_buf->nOffset,
+          buf->omx_buf->nFilledLen);
+      gst_buffer_unmap (*outbuf, &map);
+
+      err = gst_omx_port_release_buffer (port, buf);
+      if (err != OMX_ErrorNone)
+        goto release_error;
+    } else {
+      GstBufferPoolAcquireParams params = { 0, };
+      gint n = port->buffers->len;
+      GstMemory *mem;
+      gint i;
+
+      for (i = 0; i < n; i++) {
+        GstOMXBuffer *tmp = g_ptr_array_index (port->buffers, i);
+
+        if (tmp == buf)
+          break;
+      }
+      g_assert (i != n);
+
+      GST_OMX_BUFFER_POOL (pool)->current_buffer_index = i;
+      flow_ret = gst_buffer_pool_acquire_buffer (pool, outbuf, &params);
+      if (flow_ret != GST_FLOW_OK) {
+        gst_omx_port_release_buffer (port, buf);
+        goto invalid_buffer;
+      }
+      mem = gst_buffer_get_memory (*outbuf, 0);
+      gst_memory_unref (mem);
+    }
+  } else {
+    *outbuf = gst_buffer_new ();
+  }
+
+  GST_BUFFER_TIMESTAMP (*outbuf) =
+      gst_util_uint64_scale (buf->omx_buf->nTimeStamp, GST_SECOND,
+      OMX_TICKS_PER_SECOND) * 1000;
+
+  if (buf->omx_buf->nTickCount != 0)
+    GST_BUFFER_DURATION (*outbuf) =
+        gst_util_uint64_scale (buf->omx_buf->nTickCount, GST_SECOND,
+        OMX_TICKS_PER_SECOND);
+  else
+    GST_BUFFER_DURATION (*outbuf) = self->duration;
+
+  GST_DEBUG_OBJECT (self,
+      "Got buffer from component: %p with timestamp %" GST_TIME_FORMAT
+      " duration %" GST_TIME_FORMAT, outbuf,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*outbuf)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (*outbuf)));
+  return GST_FLOW_OK;
+
+component_error:
+  {
+    GST_ELEMENT_ERROR (self, LIBRARY, FAILED, (NULL),
+        ("OpenMAX component in error state %s (0x%08x)",
+            gst_omx_component_get_last_error_string (self->comp),
+            gst_omx_component_get_last_error (self->comp)));
+    gst_pad_push_event (GST_BASE_SRC_PAD (self), gst_event_new_eos ());
+    self->started = FALSE;
+    return GST_FLOW_ERROR;
+  }
+flushing:
+  {
+    GST_DEBUG_OBJECT (self, "Flushing");
+    self->started = FALSE;
+    return GST_FLOW_FLUSHING;
+  }
+invalid_buffer:
+  {
+    GST_ELEMENT_ERROR (self, LIBRARY, SETTINGS, (NULL),
+        ("Cannot acquire output buffer from pool"));
+    return flow_ret;
+  }
+release_error:
+  {
+    GST_ELEMENT_ERROR (self, LIBRARY, SETTINGS, (NULL),
+        ("Failed to relase output buffer to component: %s (0x%08x)",
+            gst_omx_error_to_string (err), err));
+    gst_pad_push_event (GST_BASE_SRC_PAD (self), gst_event_new_eos ());
+    self->started = FALSE;
+    return GST_FLOW_ERROR;
+  }
+}
+*/
+

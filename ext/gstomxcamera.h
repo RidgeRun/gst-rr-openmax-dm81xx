@@ -57,6 +57,8 @@ struct _GstOmxCamera
   gint num_buffers;
   guint skip_frames;
 
+  GstClockTime duration;
+
 };
 
 
