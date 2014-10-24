@@ -18,6 +18,9 @@
  * Boston, MA 02111-1307, USA.
  */
  
+#ifndef __GST_OMX_BUF_QUEUE_H__
+#define __GST_OMX_BUF_QUEUE_H__
+
 #include <OMX_Core.h>
 #include <OMX_Component.h>
 #include <OMX_TI_Common.h>
@@ -38,3 +41,5 @@ struct _GstOmxBufQueue
 GstOmxBufQueue *gst_omx_buf_queue_new ();
 OMX_BUFFERHEADERTYPE* gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
 OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *, OMX_BUFFERHEADERTYPE *);
+
+#endif /*__GST_OMX_BUF_QUEUE_H__*/

@@ -34,6 +34,7 @@
 #include "string.h"
 
 #include "gstomxbuftab.h"
+#include "gstomxbufqueue.h"
 #include "gstomxpad.h"
 #include "gstomxerror.h"
 

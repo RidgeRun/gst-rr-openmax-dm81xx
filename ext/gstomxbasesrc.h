@@ -53,12 +53,14 @@ struct _GstOmxBaseSrc
   OMX_HANDLETYPE handle;
   OMX_COMPONENTTYPE *component;
   OMX_CALLBACKTYPE *callbacks;
+  GstOmxBufQueue *pending_buffers;
 
   guint32 requested_size;
   guint32 field_offset;
 
   guint output_buffers;
 
+gboolean always_copy;
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
@@ -69,7 +71,13 @@ struct _GstOmxBaseSrc
   GMutex waitmutex;
   GCond waitcond;
 
-  GstFlowReturn fill_ret;
+  GstFlowReturn create_ret;
+
+  /*Sync related*/
+  GstClockTime duration;
+  GstClockTime running_time;
+  GstClockTime omx_delay;
+
 
   GList *pads;
 };
@@ -82,9 +90,7 @@ struct _GstOmxBaseSrcClass
   
   OMX_ERRORTYPE (*omx_event) (GstOmxBaseSrc *, OMX_EVENTTYPE, guint32,
 				guint32, gpointer);
-  GstFlowReturn (*omx_fill_buffer) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
-  GstFlowReturn (*omx_empty_buffer) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *);
-
+  GstFlowReturn (*omx_create) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *, GstBuffer **buffer);
 };
 
 GType gst_omx_base_src_get_type (void);

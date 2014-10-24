@@ -51,10 +51,12 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_base_src_debug);
 
 
 #define GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT    8
+#define PROP_ALWAYS_COPY_DEFAULT          FALSE
 
 enum
 {
   PROP_0,
+  PROP_ALWAYS_COPY,
   PROP_PEER_ALLOC,
   PROP_NUM_OUTPUT_BUFFERS,
 };
@@ -103,10 +105,14 @@ static void gst_omx_base_src_get_property (GObject * object, guint prop_id,
 static void gst_omx_base_src_finalize (GObject * object);
 static OMX_ERRORTYPE gst_omx_base_src_stop (GstOmxBaseSrc * this);
 static OMX_ERRORTYPE gst_omx_base_src_free_omx (GstOmxBaseSrc * this);
-static OMX_ERRORTYPE gst_omx_base_src_free_buffers (GstOmxBaseSrc * this, 
-						    GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE gst_omx_base_src_free_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name);
+static OMX_ERRORTYPE gst_omx_base_src_start (GstOmxBaseSrc * this, OMX_BUFFERHEADERTYPE * omxpeerbuf);
+static GstFlowReturn gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf);
 static OMX_ERRORTYPE
-gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name);
+gst_omx_base_src_push_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE
+gst_omx_base_src_alloc_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE
 gst_omx_base_src_for_each_pad (GstOmxBaseSrc * this, GstOmxBaseSrcPadFunc func,
 			       GstPadDirection direction, gpointer data);
@@ -114,14 +120,16 @@ static OMX_ERRORTYPE gst_omx_base_src_event_callback (OMX_HANDLETYPE handle,
 	gpointer data, OMX_EVENTTYPE event, guint32 nevent1, guint32 nevent2, gpointer eventdata);
 static OMX_ERRORTYPE gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * buffer);
-static OMX_ERRORTYPE gst_omx_base_src_empty_callback (OMX_HANDLETYPE handle,
-    gpointer data, OMX_BUFFERHEADERTYPE * buffer);
 static GstStateChangeReturn gst_omx_base_src_change_state (GstElement * element,
     GstStateChange transition);
 static OMX_ERRORTYPE
 gst_omx_base_src_flush_ports (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE
 gst_omx_base_src_set_flushing_pad (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE gst_omx_base_src_peer_alloc_buffer (GstOmxBaseSrc * this, GstOmxPad * pad,gpointer * pbuffer, guint32 * size);
+
+static GstFlowReturn
+gst_omx_base_src_get_buffer (GstOmxBaseSrc *this, GstBuffer **buffer);
 
 /* GObject vmethod implementations */
 
@@ -149,15 +157,18 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   this->started = FALSE;
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
-
+  
+  /* Initialize properties */
+  this->always_copy = PROP_ALWAYS_COPY_DEFAULT;
   this->output_buffers = GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT;
-
+  
   this->pads = NULL;
-  this->fill_ret = GST_FLOW_OK;
+  this->create_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
-
+  this->pending_buffers = gst_omx_buf_queue_new ();
+ 
   error = gst_omx_base_src_allocate_omx (this, klass->handle_name);
   
   if (GST_OMX_FAIL (error)) {
@@ -173,12 +184,12 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
+  GstPushSrcClass * pushsrc_class = GST_PUSH_SRC_CLASS (klass);
 
   parent_class = g_type_class_peek_parent (klass);
 
   klass->omx_event = NULL;
-  klass->omx_fill_buffer = NULL;
-  klass->omx_empty_buffer = NULL;
+  klass->omx_create = NULL;
   klass->handle_name = NULL;
 
   gobject_class = (GObjectClass *) klass;
@@ -207,6 +218,14 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
       g_param_spec_uint ("output-buffers", "Output buffers",
           "OMX output buffers number",
           1, 16, GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+
+   g_object_class_install_property (gobject_class, PROP_ALWAYS_COPY,
+      g_param_spec_boolean ("always-copy", "Always copy",
+          "If the output buffer should be copied or should use the OpenMax buffer",
+          PROP_ALWAYS_COPY_DEFAULT, G_PARAM_WRITABLE));
+
+  pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_base_src_create);
+  
 }
 
 
@@ -242,6 +261,10 @@ gst_omx_base_src_set_property (GObject * object, guint prop_id,
       GST_INFO_OBJECT (this, "Setting output-buffers to %d",
           this->output_buffers);
       break;
+    case PROP_ALWAYS_COPY:
+      this->always_copy = g_value_get_boolean (value);
+      GST_INFO_OBJECT (this, "Setting always_copy to %d", this->always_copy);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -261,6 +284,9 @@ gst_omx_base_src_get_property (GObject * object, guint prop_id,
     case PROP_NUM_OUTPUT_BUFFERS:
       g_value_set_uint (value, this->output_buffers);
       break;
+  case PROP_ALWAYS_COPY:
+    g_value_set_boolean (value, this->always_copy);
+    break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -284,8 +310,6 @@ gst_omx_base_src_allocate_omx (GstOmxBaseSrc * this, gchar * handle_name)
 
   this->callbacks->EventHandler =
       (GstOmxEventHandler) gst_omx_base_src_event_callback;
-  this->callbacks->EmptyBufferDone =
-      (GstOmxEmptyBufferDone) gst_omx_base_src_empty_callback;
   this->callbacks->FillBufferDone =
       (GstOmxFillBufferDone) gst_omx_base_src_fill_callback;
   
@@ -527,7 +551,7 @@ gst_omx_base_src_stop (GstOmxBaseSrc * this)
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
-  this->fill_ret = FALSE;
+  this->create_ret = FALSE;
   GST_OBJECT_UNLOCK (this);
 
   return error;
@@ -706,48 +730,6 @@ nofree:
 
 
 static OMX_ERRORTYPE
-gst_omx_base_src_empty_callback (OMX_HANDLETYPE handle,
-    gpointer data, OMX_BUFFERHEADERTYPE * buffer)
-{
-  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (data);
-  GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
-  GstBuffer *gstbuf = bufdata->buffer;
-  GstOmxPad *pad = bufdata->pad;
-  guint8 id = bufdata->id;
-
-  OMX_ERRORTYPE error = OMX_ErrorNone;
-
-
-  GST_LOG_OBJECT (this, "Empty buffer callback for buffer %d %p->%p->%p", id,
-      buffer, buffer->pBuffer, bufdata);
-
-  bufdata->buffer = NULL;
-  /*We need to return the buffer first in order to avoid race condition */
-  error = gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
-  if (GST_OMX_FAIL (error))
-    goto noreturn;
-
-  gst_buffer_unref (gstbuf);
-
-/*
-  g_mutex_lock (&this->waitmutex);
-  g_cond_signal (&this->waitcond);
-  g_mutex_unlock (&this->waitmutex);
-*/
-  return error;
-
-noreturn:
-  {
-    GST_ELEMENT_ERROR (this, LIBRARY, ENCODE,
-        ("Unable to return buffer to buftab: %s",
-            gst_omx_error_to_str (error)), (NULL));
-    buffer->pAppPrivate = NULL;
-    return error;
-  }
-}
-
-
-static OMX_ERRORTYPE
 gst_omx_base_src_free_omx (GstOmxBaseSrc * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -806,4 +788,572 @@ noflush:
     return error;
   }
 
+}
+
+
+static GstFlowReturn
+gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
+{
+  GstFlowReturn ret;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (src);
+  GstClock *clock;
+  GstClockTime abs_time, base_time, timestamp, duration; 
+  gboolean flushing;
+
+
+  GST_OBJECT_LOCK (this);
+  flushing = this->flushing;
+  GST_OBJECT_UNLOCK (this);
+
+  if (flushing)
+    goto flushing;
+ 
+  if (this->create_ret)
+    goto pusherror;
+
+
+  GST_OBJECT_LOCK (this);
+  if ((clock = GST_ELEMENT_CLOCK (this))) {
+    //we have a clock, get base time and ref clock 
+    base_time = GST_ELEMENT (this)->base_time;
+    abs_time = gst_clock_get_time (clock);
+  } else {
+    // no clock, can't set timestamps 
+    base_time = GST_CLOCK_TIME_NONE;
+    abs_time = GST_CLOCK_TIME_NONE;
+  }
+  GST_OBJECT_UNLOCK (this);
+
+
+  if (!this->started) {
+    GST_INFO_OBJECT (this, "Starting component");
+    error = gst_omx_base_src_start (this,NULL);
+    if (GST_OMX_FAIL (error))
+      goto nostart;
+  }
+
+
+  ret = gst_omx_base_src_get_buffer (this, buf);
+  if (G_UNLIKELY (ret != GST_FLOW_OK))
+    goto error;
+  
+
+  timestamp = GST_BUFFER_TIMESTAMP (*buf);
+
+  if (!this->started) {
+    this->running_time = abs_time - base_time;
+    if (!this->running_time)
+      this->running_time = timestamp;
+    this->omx_delay = timestamp - this->running_time;
+
+    GST_DEBUG_OBJECT (this, "OMX delay %" G_GINT64_FORMAT, this->omx_delay);
+    this->started = TRUE;
+  }
+
+  /* the time now is the time of the clock minus the base time */
+  timestamp = timestamp - this->omx_delay;
+
+  GST_DEBUG_OBJECT (this, "Adjusted timestamp %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (timestamp));
+
+  GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+
+  return ret;
+
+flushing:
+  { 
+    GST_DEBUG_OBJECT (this, "Flushing");
+    this->started = FALSE;
+    return GST_FLOW_OK;
+  }
+pusherror:
+  {
+    /* What to do in case of filret ? */
+    return this->create_ret;
+  }
+nostart:
+  {
+     /* What to do in case of nostart ? */
+    return GST_FLOW_ERROR;
+  }
+error:
+  {
+    GST_ERROR_OBJECT (this, "error processing buffer %d (%s)", ret,
+        gst_flow_get_name (ret));
+    return ret;
+  }
+}
+
+static GstFlowReturn
+gst_omx_base_src_get_buffer (GstOmxBaseSrc *this, GstBuffer **buffer)
+{ 
+  GstFlowReturn flow_ret;
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  GstOmxBufferData *bufdata=NULL;
+  gboolean i = FALSE;
+  GstOmxBaseSrcClass *klass = GST_OMX_BASE_SRC_GET_CLASS (this);
+
+  omx_buf = gst_omx_buf_queue_pop_buffer (this->pending_buffers);
+  
+  if(!omx_buf){
+    goto timeout;
+  }
+
+  bufdata= (GstOmxBufferData *) omx_buf->pAppPrivate;  
+  
+  GST_LOG_OBJECT (this, "Handling buffer: 0x%08x %" G_GUINT64_FORMAT,
+		  (guint) omx_buf->nFlags, (guint64) omx_buf->nTimeStamp);
+
+  GST_LOG_OBJECT (this, "Handling output data");
+
+    if (this->always_copy) {
+      /* TODO: Add always_copy handler, copy the data in a
+	 gstreamer buffer and return the omxbuffer to the buftab 
+	 For now we do the same in both cases
+      */
+      *buffer = gst_buffer_new ();
+      if (!*buffer)
+	goto noalloc;
+      
+    } else {
+      *buffer = gst_buffer_new ();
+      if (!*buffer)
+	goto noalloc;
+    }
+
+  if (klass->omx_create) {
+    this->create_ret = klass->omx_create (this, omx_buf, buffer);
+    if (this->create_ret != GST_FLOW_OK) {
+      goto cbfailed;
+    }
+  }
+
+  GST_LOG_OBJECT (this,
+      "(Get_buffer %s) Buffer %p size %d reffcount %d bufdat %p->%p",
+		  GST_OBJECT_NAME (this),omx_buf->pBuffer, GST_BUFFER_SIZE (*buffer),
+		  GST_OBJECT_REFCOUNT (*buffer), bufdata, bufdata->buffer);
+  GST_DEBUG_OBJECT (this,
+      "Got buffer from component: %p with timestamp %" GST_TIME_FORMAT
+      " duration %" GST_TIME_FORMAT, buffer,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*buffer)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (*buffer)));
+
+
+return GST_FLOW_OK;
+noalloc:
+
+ {
+    GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
+        ("Unable to allocate buffer to push"), (NULL));
+    return GST_FLOW_ERROR;
+  }
+timeout:
+  {
+    GST_ELEMENT_ERROR (this, LIBRARY, SETTINGS, (NULL),
+        ("Cannot acquire output buffer from pending queue"));
+    return flow_ret;
+  }
+cbfailed:
+  {
+    GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
+        ("Subclass failed to process buffer (id:%d): %s",
+            bufdata->id, gst_flow_get_name (this->create_ret)), (NULL));
+    return GST_FLOW_ERROR; 
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_base_src_start (GstOmxBaseSrc * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  if (this->started)
+    goto alreadystarted;
+
+  GST_INFO_OBJECT (this, "Sending handle to Idle");
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_SendCommand (this->handle, OMX_CommandStateSet, OMX_StateIdle,
+      NULL);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto starthandle;
+
+  GST_INFO_OBJECT (this, "Allocating buffers for src ports");
+  error =
+      gst_omx_base_src_for_each_pad (this, gst_omx_base_src_alloc_buffers, GST_PAD_SRC,
+      NULL);
+  if (GST_OMX_FAIL (error))
+    goto noalloc;
+
+  GST_INFO_OBJECT (this, "Waiting for handle to become Idle");
+  error = gst_omx_base_src_wait_for_condition (this,
+      gst_omx_base_src_condition_state, (gpointer) OMX_StateIdle,
+      (gpointer) & this->state);
+  if (GST_OMX_FAIL (error))
+    goto starthandle;
+
+  GST_INFO_OBJECT (this, "Sending handle to Executing");
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_SendCommand (this->handle, OMX_CommandStateSet,
+      OMX_StateExecuting, NULL);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto starthandle;
+
+  GST_INFO_OBJECT (this, "Waiting for handle to become Executing");
+  error = gst_omx_base_src_wait_for_condition (this,
+      gst_omx_base_src_condition_state, (gpointer) OMX_StateExecuting,
+      (gpointer) & this->state);
+  if (GST_OMX_FAIL (error))
+    goto starthandle;
+
+  GST_INFO_OBJECT (this, "Pushing output buffers");
+  error =
+      gst_omx_base_src_for_each_pad (this, gst_omx_base_src_push_buffers,
+      GST_PAD_UNKNOWN, NULL);
+  if (GST_OMX_FAIL (error))
+    goto nopush;
+
+  this->started = TRUE;
+
+  return error;
+
+alreadystarted:
+  {
+    GST_WARNING_OBJECT (this, "Component already started");
+    return error;
+  }
+starthandle:
+  {
+    GST_ERROR_OBJECT (this, "Unable to set handle to Idle");
+    return error;
+  }
+noalloc:
+  {
+    GST_ERROR_OBJECT (this, "Unable to allocate resources for buffers");
+    return error;
+  }
+nopush:
+  {
+    GST_ERROR_OBJECT (this, "Unable to push buffer into the output port");
+    return error;
+  }
+}
+
+
+static OMX_ERRORTYPE gst_omx_base_src_peer_alloc_buffer (GstOmxBaseSrc * this, GstOmxPad * pad,
+							 gpointer * pbuffer, guint32 * size)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
+
+  GstBuffer *peerbuf = NULL;
+  GstFlowReturn ret;
+
+  ret =
+      gst_pad_alloc_buffer (GST_PAD (pad), 0,
+      GST_OMX_PAD_PORT (pad)->nBufferSize,
+      gst_pad_get_negotiated_caps (GST_PAD (pad)), &peerbuf);
+
+  if (GST_FLOW_OK != ret)
+    goto nodownstream;
+
+  if (GST_OMX_IS_OMX_BUFFER (peerbuf)) {
+    omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_DATA (peerbuf);
+    *pbuffer = omxpeerbuffer->pBuffer;
+    *size = omxpeerbuffer->nAllocLen;
+  } else {
+    pbuffer = NULL;
+    *size = 0;
+  }
+  gst_buffer_unref (peerbuf);
+
+  return error;
+
+nodownstream:
+  {
+    GST_ERROR_OBJECT (this, "Downstream element was unable to provide buffers");
+    error = OMX_ErrorInsufficientResources;
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_src_alloc_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *buffer = NULL;
+  GList *peerbuffers = NULL, *currentbuffer = NULL;
+  guint i;
+  GstOmxBufferData *bufdata = NULL;
+  GstOmxBufferData *bufdatatemp = NULL;
+  guint32 maxsize, size = 0;
+  gboolean divided_buffers = FALSE;
+  gboolean top_field = TRUE;
+  gpointer pbuffer = NULL;
+
+  if (pad->buffers->table != NULL) {
+    GST_DEBUG_OBJECT (this, "Ignoring buffers allocation for %s:%s",
+        GST_DEBUG_PAD_NAME (GST_PAD (pad)));
+    return error;
+  }
+
+  if (this->interlaced)
+    divided_buffers = TRUE;
+
+  GST_DEBUG_OBJECT (this, "Allocating buffers for %s:%s",  GST_DEBUG_PAD_NAME (GST_PAD (pad)));
+
+  for (i = 0; i < pad->port->nBufferCountActual; ++i) {
+
+    /* First we try to ask for downstream OMX buffers */
+    if (GST_PAD_IS_SRC (pad) && this->peer_alloc) {
+      error = gst_omx_base_src_peer_alloc_buffer (this, pad, &pbuffer, &size);
+    }
+
+    if (error != OMX_ErrorNone)
+      goto noalloc;
+
+
+    bufdata = (GstOmxBufferData *) g_malloc (sizeof (GstOmxBufferData));
+    bufdata->pad = pad;
+    bufdata->buffer = NULL;
+
+    if (currentbuffer) {
+      bufdata->id = ((GstOmxBufferData *) ((GstOmxBufTabNode *) currentbuffer->data)->buffer->pAppPrivate)->id + (!top_field) * pad->port->nBufferCountActual;  // Ensure bottom fields don't have the same ids as the top
+    } else {
+      bufdata->id = i;
+    }
+
+    if (divided_buffers)
+      top_field = !top_field;
+
+    if (pbuffer) {
+      GST_DEBUG_OBJECT (this, "Received buffer number %u:"
+          "%p of size %d", bufdata->id, pbuffer, size);
+
+      g_mutex_lock (&_omx_mutex);
+      error = OMX_UseBuffer (this->handle, &buffer,
+          GST_OMX_PAD_PORT (pad)->nPortIndex, bufdata, size, pbuffer);
+      g_mutex_unlock (&_omx_mutex);
+      if (GST_OMX_FAIL (error))
+        goto nouse;
+      GST_DEBUG_OBJECT (this, "Saved buffer number %u:"
+          "%p->%p", bufdata->id, buffer, pbuffer);
+      /* No upstream buffer received or pad is a sink, allocate our own */
+    } else {
+      maxsize = GST_OMX_PAD_PORT (pad)->nBufferSize > this->requested_size ?
+          GST_OMX_PAD_PORT (pad)->nBufferSize : this->requested_size;
+
+      g_mutex_lock (&_omx_mutex);
+      error = OMX_AllocateBuffer (this->handle, &buffer,
+          GST_OMX_PAD_PORT (pad)->nPortIndex, bufdata, maxsize);
+      g_mutex_unlock (&_omx_mutex);
+      if (GST_OMX_FAIL (error))
+        goto noalloc;
+      GST_DEBUG_OBJECT (this, "Allocated buffer number %u: %p->%p", i, buffer,
+          buffer->pBuffer);
+    }
+
+    error = gst_omx_buf_tab_add_buffer (pad->buffers, buffer);
+    if (GST_OMX_FAIL (error))
+      goto addbuffer;
+  }
+
+out:
+  return error;
+
+nouse:
+  {
+    GST_ERROR_OBJECT (this, "Unable to use buffer provided by downstream: %s",
+        gst_omx_error_to_str (error));
+
+    g_free (bufdata);
+    return error;
+  }
+noalloc:
+  {
+    GST_ERROR_OBJECT (this, "Failed to allocate buffers");
+    g_free (bufdata);
+    /*TODO: should I free buffers? */
+    return error;
+  }
+addbuffer:
+  {
+    GST_ERROR_OBJECT (this, "Unable to add the buffer to the buftab");
+    g_free (bufdata);
+    /*TODO: should I free buffers? */
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_src_push_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *buffer;
+  GstOmxBufTabNode *node;
+  guint i;
+  GList *buffers;
+
+  buffers = pad->buffers->table;
+
+  for (i = 0; i < pad->port->nBufferCountActual; ++i) {
+
+    if (!buffers)
+      goto shortread;
+
+    node = (GstOmxBufTabNode *) buffers->data;
+    buffer = node->buffer;
+
+    GST_DEBUG_OBJECT (this, "Pushing buffer number %u: %p of size %d", i,
+        buffer, (int) buffer->nAllocLen);
+
+    g_mutex_lock (&_omx_mutex);
+    error = this->component->FillThisBuffer (this->handle, buffer);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto nopush;
+
+    buffers = g_list_next (buffers);
+  }
+
+  return error;
+
+nopush:
+  {
+    GST_ERROR_OBJECT (this, "Failed to push buffers");
+    /*TODO: should I free buffers? */
+    return error;
+  }
+shortread:
+  {
+    GST_ERROR_OBJECT (this, "Malformed output buffer list");
+    /*TODO: should I free buffers? */
+    return OMX_ErrorResourcesLost;
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
+    gpointer data, OMX_BUFFERHEADERTYPE * outbuf)
+{
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (data);
+  OMX_BUFFERHEADERTYPE *omxbuf;
+  gboolean busy;
+  GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  gboolean flushing;
+
+  GST_LOG_OBJECT (this, "Fill buffer callback for buffer %p->%p", outbuf,
+      outbuf->pBuffer);
+
+  GST_OBJECT_LOCK (this);
+  flushing = this->flushing;
+  GST_OBJECT_UNLOCK (this);
+
+  gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
+
+  if (busy)
+    goto illegal;
+
+  if (flushing)
+    goto flushing;
+  /*
+  if (this->fill_ret != GST_FLOW_OK)
+    goto drop;
+  */
+  GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
+      GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
+      GST_STATE_NEXT (this));
+  if (GST_STATE_PAUSED > GST_STATE (this))
+    goto flushing;
+
+  gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
+
+  error= gst_omx_buf_queue_push_buffer(this->pending_buffers,outbuf);
+ 
+ return error;
+
+illegal:
+  {
+    GST_ERROR_OBJECT (this,
+        "Double fill callback for buffer %p->%p, this should not happen",
+        outbuf, outbuf->pBuffer);
+    /* g_mutex_lock (&_omx_mutex); */
+    /* error = this->component->FillThisBuffer (this->handle, outbuf); */
+    /* g_mutex_unlock (&_omx_mutex); */
+    return error;
+  }
+
+flushing:
+  {
+    GST_DEBUG_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
+    return error;
+  }
+
+  /*drop:
+  {
+    GST_LOG_OBJECT (this, "Dropping buffer, push error %s",
+        gst_flow_get_name (this->fill_ret));
+    g_mutex_lock (&_omx_mutex);
+    error = this->component->FillThisBuffer (this->handle, outbuf);
+    g_mutex_unlock (&_omx_mutex);
+    return error;
+    }*/
+}
+
+
+void
+gst_omx_base_src_release_buffer (gpointer data)
+{
+
+  OMX_BUFFERHEADERTYPE *buffer = (OMX_BUFFERHEADERTYPE *) data;
+  OMX_ERRORTYPE error;
+  GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
+  GstOmxPad *pad = bufdata->pad;
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (GST_OBJECT_PARENT (pad));
+  gboolean flushing;
+
+  GST_LOG_OBJECT (this, "Returning buffer %p to table", buffer);
+
+  GST_OBJECT_LOCK (this);
+  flushing = this->flushing;
+  GST_OBJECT_UNLOCK (this);
+
+  error = gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
+  if (GST_OMX_FAIL (error))
+    goto noreturn;
+
+  if (flushing)
+    goto flushing;
+
+  g_mutex_lock (&_omx_mutex);
+  error = this->component->FillThisBuffer (this->handle, buffer);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto nofill;
+
+  return;
+
+noreturn:
+  {
+    GST_ELEMENT_ERROR (GST_ELEMENT (this), LIBRARY, ENCODE,
+        ("Malformed buffer list"), (NULL));
+    return;
+  }
+flushing:
+  {
+    GST_DEBUG_OBJECT (this,
+        "Discarded buffer %p->%p due to flushing component", buffer,
+        buffer->pBuffer);
+    return;
+  }
+nofill:
+  {
+    GST_ERROR_OBJECT (this, "Unable to recycle output buffer: %s",
+        gst_omx_error_to_str (error));
+  }
 }

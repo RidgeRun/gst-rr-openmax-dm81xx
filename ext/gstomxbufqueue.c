@@ -63,7 +63,7 @@ gst_omx_buf_queue_push_buffer (GstOmxBufQueue * bufqueue,
 OMX_BUFFERHEADERTYPE *
 gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *bufqueue)
 {
-  OMX_BUFFERHEADERTYPE *buffer=NULL;
+  OMX_BUFFERHEADERTYPE *buffer = NULL;
   guint64 endtime;
   endtime = g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND;
 
