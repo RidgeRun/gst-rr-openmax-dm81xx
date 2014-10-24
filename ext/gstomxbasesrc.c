@@ -1174,7 +1174,7 @@ nouse:
   }
 noalloc:
   {
-    GST_ERROR_OBJECT (this, "Failed to allocate buffers");
+    GST_ERROR_OBJECT (this, "Failed to allocate buffers:  %s", gst_omx_error_to_str (error));
     g_free (bufdata);
     /*TODO: should I free buffers? */
     return error;

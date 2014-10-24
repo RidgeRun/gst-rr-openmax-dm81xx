@@ -540,7 +540,7 @@ static OMX_ERRORTYPE gst_omx_camera_init_pads (GstOmxBaseSrc * base)
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->srcpad));
   GST_OMX_INIT_STRUCT (port, OMX_PARAM_PORTDEFINITIONTYPE);
 
-  port->nPortIndex = OMX_VFCC_OUTPUT_PORT_START_INDEX;;
+  port->nPortIndex = OMX_VFCC_OUTPUT_PORT_START_INDEX;
   port->nBufferCountActual = base->output_buffers;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height_padded;
@@ -625,6 +625,22 @@ GST_DEBUG_OBJECT (this,
   this->duration = gst_util_uint64_scale_int (GST_SECOND,
       GST_VIDEO_INFO_FPS_D (info), GST_VIDEO_INFO_FPS_N (info));
       */
+  GST_INFO_OBJECT (this, "Enabling output port");
+  g_mutex_lock (&_omx_mutex);
+   error = OMX_SendCommand (base->handle, OMX_CommandPortEnable,
+      OMX_VFCC_OUTPUT_PORT_START_INDEX, NULL);
+  g_mutex_unlock (&_omx_mutex);
+
+  if (GST_OMX_FAIL (error))
+    goto enablefailed;
+
+   GST_INFO_OBJECT (this, "Waiting for output port to enable");
+  error = gst_omx_base_src_wait_for_condition (base,
+      gst_omx_base_src_condition_enabled,
+      (gpointer) & GST_OMX_PAD (this->srcpad)->enabled, NULL);
+  if (GST_OMX_FAIL (error))
+    goto noenable;
+
   return error;
 
 noport:
@@ -636,6 +652,11 @@ noport:
 noenable:
   {
     GST_ERROR_OBJECT (this, "Failed to enable omx_camera");
+    return error;
+  }
+enablefailed:
+  {
+    GST_ERROR_OBJECT (this, "Failed to enable Port: (%s)", gst_omx_error_to_str (error));
     return error;
   }
 }
