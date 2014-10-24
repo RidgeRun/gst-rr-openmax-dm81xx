@@ -60,7 +60,7 @@ struct _GstOmxBaseSrc
 
   guint output_buffers;
 
-gboolean always_copy;
+  gboolean always_copy;
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
@@ -91,6 +91,8 @@ struct _GstOmxBaseSrcClass
   OMX_ERRORTYPE (*omx_event) (GstOmxBaseSrc *, OMX_EVENTTYPE, guint32,
 				guint32, gpointer);
   GstFlowReturn (*omx_create) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *, GstBuffer **buffer);
+  OMX_ERRORTYPE (*init_ports) (GstOmxBaseSrc *);
+  gboolean (*parse_caps) (GstBaseSrc *, GstCaps *);
 };
 
 GType gst_omx_base_src_get_type (void);

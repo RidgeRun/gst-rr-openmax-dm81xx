@@ -184,7 +184,7 @@ gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint he
 static void
 gst_omx_camera_class_init (GstOmxCameraClass * klass)
 {
- GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstBaseSrcClass *base_src_class = GST_BASE_SRC_CLASS (klass);
   GstOmxBaseSrcClass *baseomxsrc_class = GST_OMX_BASE_SRC_CLASS (klass);
@@ -230,7 +230,8 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_template));
 
-  base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
+  baseomxsrc_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
+  baseomxsrc_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_camera_init_pads);
   base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
 
   //  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
@@ -382,10 +383,6 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
-
-  error = gst_omx_camera_init_pads (GST_OMX_BASE_SRC(this));
-  if (GST_OMX_FAIL (error))
-    goto nopads;
   
   return TRUE;
  

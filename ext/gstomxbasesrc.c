@@ -130,6 +130,11 @@ static OMX_ERRORTYPE gst_omx_base_src_peer_alloc_buffer (GstOmxBaseSrc * this, G
 
 static GstFlowReturn
 gst_omx_base_src_get_buffer (GstOmxBaseSrc *this, GstBuffer **buffer);
+static gboolean
+gst_omx_base_src_check_caps (GstPad * pad, GstCaps * newcaps);
+static gboolean
+gst_omx_base_src_set_caps (GstBaseSrc * src, GstCaps * caps);
+
 
 /* GObject vmethod implementations */
 
@@ -184,12 +189,15 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
-  GstPushSrcClass * pushsrc_class = GST_PUSH_SRC_CLASS (klass);
+  GstPushSrcClass *pushsrc_class = GST_PUSH_SRC_CLASS (klass);
+  GstBaseSrcClass *base_src_class = GST_BASE_SRC_CLASS (klass);
 
   parent_class = g_type_class_peek_parent (klass);
 
   klass->omx_event = NULL;
   klass->omx_create = NULL;
+  klass->init_ports = NULL;
+  klass->parse_caps = NULL;
   klass->handle_name = NULL;
 
   gobject_class = (GObjectClass *) klass;
@@ -224,7 +232,8 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
           "If the output buffer should be copied or should use the OpenMax buffer",
           PROP_ALWAYS_COPY_DEFAULT, G_PARAM_WRITABLE));
 
-  pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_base_src_create);
+ pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_base_src_create);
+ base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_base_src_set_caps);
   
 }
 
@@ -1355,5 +1364,126 @@ nofill:
   {
     GST_ERROR_OBJECT (this, "Unable to recycle output buffer: %s",
         gst_omx_error_to_str (error));
+  }
+}
+
+static gboolean
+gst_omx_base_src_set_caps (GstBaseSrc * src, GstCaps * caps)
+{
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (src);
+  GstOmxBaseSrcClass *klass = GST_OMX_BASE_SRC_GET_CLASS (this);
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+ 
+  if (!klass->parse_caps)
+    goto noparsecaps;
+
+  if (!klass->parse_caps (src, caps))
+    goto capsinvalid;
+  
+  if(OMX_StateLoaded < this->state){
+    if (!gst_omx_base_src_check_caps (GST_BASE_SRC_PAD(src), caps))
+      goto noresolutionchange;
+  }
+  GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
+		   GST_DEBUG_PAD_NAME (GST_BASE_SRC_PAD(src)));
+  if (OMX_StateLoaded < this->state) {
+    GST_INFO_OBJECT (this, "Resetting component");
+    error = gst_omx_base_src_stop (this);
+    if (GST_OMX_FAIL (error))
+      goto nostartstop;
+  }
+
+  if (!klass->init_ports)
+    goto noinitports;
+
+  error = klass->init_ports (this);
+  if (GST_OMX_FAIL (error))
+    goto nopads;
+
+  GST_DEBUG_OBJECT (this, "Caps %s set successfully",
+      gst_caps_to_string (caps));
+  return TRUE;
+
+noresolutionchange:
+  {
+    GST_DEBUG_OBJECT (this,
+        "Resolution not changed, ports not need to be reinitialized");
+    return TRUE;
+  }
+noparsecaps:
+  {
+    GST_ERROR_OBJECT (this, "%s doesn't have a parse caps function",
+        GST_OBJECT_NAME (this));
+    return FALSE;
+  }
+capsinvalid:
+  {
+    GST_ERROR_OBJECT (this, "Unable to parse capabilities");
+    return FALSE;
+  }
+nostartstop:
+  {
+    GST_ERROR_OBJECT (this, "Unable to start/stop component: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
+  }
+nopads:
+  {
+    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
+  }
+noinitports:
+  {
+    GST_ERROR_OBJECT (this, "%s doesn't have an init ports function",
+        GST_OBJECT_NAME (this));
+    return FALSE;
+  }
+}
+
+static gboolean
+gst_omx_base_src_check_caps (GstPad * pad, GstCaps * newcaps)
+{
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (GST_OBJECT_PARENT (pad));
+  GstCaps *caps = NULL;
+  GstStructure *structure = NULL;
+  GstStructure *newstructure = NULL;
+  gint width = 0, height = 0;
+  gint newwidth = 0, newheight = 0;
+
+  GST_LOG_OBJECT (this, "Check changes on new caps");
+
+  caps = gst_pad_get_negotiated_caps (pad);
+  if (!caps)
+    goto nocaps;
+
+  structure = gst_caps_get_structure (caps, 0);
+  newstructure = gst_caps_get_structure (newcaps, 0);
+
+  gst_structure_get_int (structure, "width", &width);
+  gst_structure_get_int (structure, "height", &height);
+  gst_structure_get_int (newstructure, "width", &newwidth);
+  gst_structure_get_int (newstructure, "height", &newheight);
+
+  if (width != newwidth || height != newheight)
+    goto initializeports;
+  else
+    goto notinitializeports;
+
+nocaps:
+  {
+    GST_DEBUG_OBJECT (this, "Caps are not negotiated yet");
+    return TRUE;
+  }
+initializeports:
+  {
+    GST_DEBUG_OBJECT (this, "There is a resolution change, initializing ports");
+    return TRUE;
+  }
+notinitializeports:
+  {
+    GST_DEBUG_OBJECT (this,
+        "For new caps it's not necessary to initialize ports");
+    return FALSE;
   }
 }
