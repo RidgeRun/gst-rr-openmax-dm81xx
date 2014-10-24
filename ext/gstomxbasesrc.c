@@ -1,9 +1,9 @@
 /*
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
+ * Copyright (C) 2014 Ronny Jimenez <ronny.jimenez@ridgerun.com>
  * Copyright (C) 2014 Melissa Montero <melissa.montero@ridgerun.com>
  * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
- * Copyright (C) 2014 Ronny Jimenez <ronny.jimenez@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -157,6 +157,7 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   this->requested_size = 0;
+  this->offset=0;
   this->peer_alloc = TRUE;
   this->flushing = FALSE;
   this->started = FALSE;
@@ -821,7 +822,7 @@ gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
   if (this->create_ret)
     goto pusherror;
 
-
+  /* timestamps, LOCK to get clock and base time. */
   GST_OBJECT_LOCK (this);
   if ((clock = GST_ELEMENT_CLOCK (this))) {
     //we have a clock, get base time and ref clock 
@@ -834,14 +835,12 @@ gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
   }
   GST_OBJECT_UNLOCK (this);
 
-
   if (!this->started) {
     GST_INFO_OBJECT (this, "Starting component");
     error = gst_omx_base_src_start (this,NULL);
     if (GST_OMX_FAIL (error))
       goto nostart;
   }
-
 
   ret = gst_omx_base_src_get_buffer (this, buf);
   if (G_UNLIKELY (ret != GST_FLOW_OK))
@@ -860,6 +859,10 @@ gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
     this->started = TRUE;
   }
 
+  /* set buffer metadata */
+  GST_BUFFER_OFFSET (*buf) = this->offset++;
+  GST_BUFFER_OFFSET_END (*buf) = this->offset;
+
   /* the time now is the time of the clock minus the base time */
   timestamp = timestamp - this->omx_delay;
 
@@ -867,6 +870,12 @@ gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
       GST_TIME_ARGS (timestamp));
 
   GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+
+  GST_DEBUG_OBJECT (this,
+      "Got buffer from component: %p with timestamp %" GST_TIME_FORMAT
+      " duration %" GST_TIME_FORMAT, buf,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*buf)),
+		    GST_TIME_ARGS (GST_BUFFER_DURATION (*buf)));
 
   return ret;
 
@@ -1025,7 +1034,7 @@ gst_omx_base_src_start (GstOmxBaseSrc * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
   if (GST_OMX_FAIL (error))
     goto nopush;
 
-  this->started = TRUE;
+  //this->started = TRUE;
 
   return error;
 

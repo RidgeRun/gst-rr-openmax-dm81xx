@@ -74,6 +74,7 @@ struct _GstOmxBaseSrc
   GstFlowReturn create_ret;
 
   /*Sync related*/
+  guint64 offset;
   GstClockTime duration;
   GstClockTime running_time;
   GstClockTime omx_delay;

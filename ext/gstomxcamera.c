@@ -618,10 +618,9 @@ GST_DEBUG_OBJECT (this,
 
 
    gst_omx_camera_set_skip_frames (this);
-   /*
-  this->duration = gst_util_uint64_scale_int (GST_SECOND,
-      GST_VIDEO_INFO_FPS_D (info), GST_VIDEO_INFO_FPS_N (info));
-      */
+  
+  base->duration = 1e9 * this->format.framerate_den / this->format.framerate_num;
+      
   GST_INFO_OBJECT (this, "Enabling output port");
   g_mutex_lock (&_omx_mutex);
    error = OMX_SendCommand (base->handle, OMX_CommandPortEnable,
