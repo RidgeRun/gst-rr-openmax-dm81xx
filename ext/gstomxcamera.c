@@ -772,7 +772,7 @@ gst_omx_camera_create (GstOmxBaseSrc *base,  OMX_BUFFERHEADERTYPE *omx_buf, GstB
   else
     GST_BUFFER_DURATION (*buffer) = base->duration;
 
-  GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
+  GST_BUFFER_FLAG_SET (*buffer, GST_OMX_BUFFER_FLAG);
   bufdata->buffer = *buffer;
 
   return GST_FLOW_OK;
