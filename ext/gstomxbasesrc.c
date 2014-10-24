@@ -951,8 +951,8 @@ noalloc:
 timeout:
   {
     GST_ELEMENT_ERROR (this, LIBRARY, SETTINGS, (NULL),
-        ("Cannot acquire output buffer from pending queue"));
-    return flow_ret;
+        ("Cannot acquire output buffer from pending queue, check that a video source is connected"));
+    return  GST_FLOW_ERROR;
   }
 cbfailed:
   {
