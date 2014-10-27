@@ -234,7 +234,6 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
   baseomxsrc_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_camera_init_pads);
   base_src_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
 
-  //  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
 
   
   baseomxsrc_class->handle_name = "OMX.TI.VPSSM3.VFCC";

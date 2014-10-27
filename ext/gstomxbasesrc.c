@@ -127,7 +127,8 @@ gst_omx_base_src_flush_ports (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer da
 static OMX_ERRORTYPE
 gst_omx_base_src_set_flushing_pad (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE gst_omx_base_src_peer_alloc_buffer (GstOmxBaseSrc * this, GstOmxPad * pad,gpointer * pbuffer, guint32 * size);
-
+static gboolean
+gst_omx_base_src_event (GstBaseSrc * src, GstEvent * event);
 static GstFlowReturn
 gst_omx_base_src_get_buffer (GstOmxBaseSrc *this, GstBuffer **buffer);
 static gboolean
@@ -235,6 +236,7 @@ gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass)
 
  pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_base_src_create);
  base_src_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_base_src_set_caps);
+ base_src_class->event = GST_DEBUG_FUNCPTR (gst_omx_base_src_event);
   
 }
 
@@ -674,10 +676,18 @@ static OMX_ERRORTYPE
 gst_omx_base_src_free_buffers (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
-  OMX_BUFFERHEADERTYPE *buffer;
+  OMX_BUFFERHEADERTYPE *buffer=NULL;
   GstOmxBufTabNode *node;
   guint i;
   GList *buffers;
+
+  buffer = gst_omx_buf_queue_pop_buffer (this->pending_buffers);
+  while(buffer){
+    GST_LOG_OBJECT (this, "Cleaning pending queue of buffers");
+    gst_omx_base_src_release_buffer((gpointer) buffer);
+    buffer = gst_omx_buf_queue_pop_buffer (this->pending_buffers);
+  }
+
 
   buffers = pad->buffers->table;
 
@@ -781,6 +791,7 @@ gst_omx_base_src_flush_ports (GstOmxBaseSrc * this, GstOmxPad * pad, gpointer da
     return error;
 
   g_mutex_lock (&_omx_mutex);
+  GST_DEBUG_OBJECT (this, "Setting handle to flush");
   error = OMX_SendCommand (this->handle, OMX_CommandFlush, -1, NULL);
   g_mutex_unlock (&_omx_mutex);
 
@@ -1495,4 +1506,62 @@ notinitializeports:
         "For new caps it's not necessary to initialize ports");
     return FALSE;
   }
+}
+
+static gboolean
+gst_omx_base_src_event (GstBaseSrc * src, GstEvent * event)
+{
+
+  GstOmxBaseSrc *this = GST_OMX_BASE_SRC (src);
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  if (G_UNLIKELY (this == NULL)) {
+    gst_event_unref (event);
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (this, "handling event %p %" GST_PTR_FORMAT, event, event);
+
+  switch (GST_EVENT_TYPE (event)) {
+      /* Put the component in flush state so it doesn't 
+       * try to process any more buffers. */
+    case GST_EVENT_EOS:
+    {
+      GST_INFO_OBJECT (this, "EOS received, flushing ports");
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+      error =
+          gst_omx_base_src_for_each_pad (this, gst_omx_base_src_flush_ports,
+          GST_PAD_UNKNOWN, NULL);
+      if (GST_OMX_FAIL (error))
+        goto noflush_eos;
+      break;
+    }
+  case GST_EVENT_FLUSH_START:
+   {
+      GST_INFO_OBJECT (this, "Flush start received, flushing ports");
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+      error =
+          gst_omx_base_src_for_each_pad (this, gst_omx_base_src_flush_ports,
+          GST_PAD_UNKNOWN, NULL);
+      if (GST_OMX_FAIL (error))
+        goto noflush_eos;
+      break;
+    }
+    default:
+   {
+     GST_INFO_OBJECT (this, "Event:%s received", gst_event_type_get_name(GST_EVENT_TYPE (event)));
+     break;
+   }  
+  }
+  /* Handle everything else as default */
+  return GST_BASE_SRC_CLASS (parent_class)->event (src, event);
+
+noflush_eos:
+  GST_ERROR_OBJECT (this, "Unable to flush component after EOS: %s ",
+      gst_omx_error_to_str (error));
+  return FALSE;
 }
