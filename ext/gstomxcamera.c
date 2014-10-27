@@ -310,15 +310,14 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
     this->format.width = -1;
     goto invalidcaps;
   }
-  this->format.width_padded =
-      GST_OMX_ALIGN (this->format.width + (2 * PADX), 128);
+  this->format.width_padded =this->format.width;
 
   GST_DEBUG_OBJECT (this, "Reading height");
   if (!gst_structure_get_int (structure, "height", &this->format.height)) {
     this->format.height = -1;
     goto invalidcaps;
   }
-  this->format.height_padded = GST_OMX_ALIGN (this->format.height, 16);
+  this->format.height_padded = this->format.height;
 
   GST_DEBUG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
@@ -334,7 +333,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   this->format.interlaced = FALSE;
 
   this->format.size_padded =
-      this->format.width_padded * (this->format.height_padded + 4 * PADY) * 1.5;
+      this->format.width_padded * this->format.height_padded  * 1.5;
   this->format.size = gst_video_format_get_size (this->format.format,
       this->format.width, this->format.height);
 
