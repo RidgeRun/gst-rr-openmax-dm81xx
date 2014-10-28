@@ -17,7 +17,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
- 
+
 #ifndef __GST_OMX_BUF_QUEUE_H__
 #define __GST_OMX_BUF_QUEUE_H__
 
@@ -39,7 +39,8 @@ struct _GstOmxBufQueue
 };
 
 GstOmxBufQueue *gst_omx_buf_queue_new ();
-OMX_BUFFERHEADERTYPE* gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
-OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *, OMX_BUFFERHEADERTYPE *);
+OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
+OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *,
+    OMX_BUFFERHEADERTYPE *);
 
 #endif /*__GST_OMX_BUF_QUEUE_H__*/

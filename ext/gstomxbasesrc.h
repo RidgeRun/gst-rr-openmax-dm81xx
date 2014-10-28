@@ -40,11 +40,11 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_BASE_SRC))
 #define GST_IS_OMX_BASE_SRC_CLASS(klass)				\
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_BASE_SRC))
-
 typedef struct _GstOmxBaseSrc GstOmxBaseSrc;
 typedef struct _GstOmxBaseSrcClass GstOmxBaseSrcClass;
 
-typedef OMX_ERRORTYPE (*GstOmxBaseSrcPadFunc) (GstOmxBaseSrc *, GstOmxPad *, gpointer);
+typedef OMX_ERRORTYPE (*GstOmxBaseSrcPadFunc) (GstOmxBaseSrc *, GstOmxPad *,
+    gpointer);
 
 struct _GstOmxBaseSrc
 {
@@ -73,7 +73,7 @@ struct _GstOmxBaseSrc
 
   GstFlowReturn create_ret;
 
-  /*Sync related*/
+  /*Sync related */
   guint64 offset;
   GstClockTime duration;
   GstClockTime running_time;
@@ -88,12 +88,13 @@ struct _GstOmxBaseSrcClass
   GstPushSrcClass parent_class;
 
   gchar *handle_name;
-  
-  OMX_ERRORTYPE (*omx_event) (GstOmxBaseSrc *, OMX_EVENTTYPE, guint32,
-				guint32, gpointer);
-  GstFlowReturn (*omx_create) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *, GstBuffer **buffer);
-  OMX_ERRORTYPE (*init_ports) (GstOmxBaseSrc *);
-  gboolean (*parse_caps) (GstBaseSrc *, GstCaps *);
+
+    OMX_ERRORTYPE (*omx_event) (GstOmxBaseSrc *, OMX_EVENTTYPE, guint32,
+      guint32, gpointer);
+    GstFlowReturn (*omx_create) (GstOmxBaseSrc *, OMX_BUFFERHEADERTYPE *,
+      GstBuffer ** buffer);
+    OMX_ERRORTYPE (*init_ports) (GstOmxBaseSrc *);
+    gboolean (*parse_caps) (GstBaseSrc *, GstCaps *);
 };
 
 GType gst_omx_base_src_get_type (void);
@@ -112,4 +113,3 @@ void gst_omx_base_src_release_buffer (gpointer data);
 
 G_END_DECLS
 #endif /* __GST_OMX_BASE_H__ */
-
