@@ -203,7 +203,7 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
           GST_OMX_CAMERA_CAPT_MODE_TYPE, PROP_CAPT_MODE_DEFAULT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_CAPT_MODE,
+  g_object_class_install_property (gobject_class, PROP_VIP_MODE,
       g_param_spec_enum ("vip-mode", "VIP mode",
           "VIP port split configuration",
           GST_OMX_CAMERA_VIP_MODE_TYPE, PROP_VIP_MODE_DEFAULT,
@@ -453,18 +453,23 @@ gst_omx_camera_set_property (GObject * object,
   switch (prop_id) {
     case PROP_INTERFACE:
       this->interface = g_value_get_enum (value);
+      GST_INFO_OBJECT (this, "Setting interface to %d", this->interface);
       break;
     case PROP_CAPT_MODE:
       this->capt_mode = g_value_get_enum (value);
+      GST_INFO_OBJECT (this, "Setting capt-mode to %d", this->capt_mode);
       break;
     case PROP_VIP_MODE:
       this->vip_mode = g_value_get_enum (value);
+      GST_INFO_OBJECT (this, "Setting vip-mode to %d", this->vip_mode);
       break;
     case PROP_SCAN_TYPE:
       this->scan_type = g_value_get_enum (value);
+      GST_INFO_OBJECT (this, "Setting scan-type to %d", this->scan_type);
       break;
     case PROP_SKIP_FRAMES:
       this->skip_frames = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting skip-frames to %d", this->skip_frames);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
