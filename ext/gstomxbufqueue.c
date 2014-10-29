@@ -89,3 +89,20 @@ timeout:
   return buffer;
 
 }
+
+OMX_BUFFERHEADERTYPE *
+gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue * bufqueue)
+{
+  OMX_BUFFERHEADERTYPE *buffer = NULL;
+
+  g_mutex_lock (&bufqueue->queuemutex);
+
+  if (g_queue_is_empty (bufqueue->queue)) {
+    buffer = NULL;
+  } else {
+    buffer = (OMX_BUFFERHEADERTYPE *) g_queue_pop_head (bufqueue->queue);
+  }
+  g_mutex_unlock (&bufqueue->queuemutex);
+
+  return buffer;
+}
