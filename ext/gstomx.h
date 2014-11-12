@@ -28,6 +28,7 @@
 #include <OMX_Component.h>
 #include <OMX_TI_Common.h>
 #include <OMX_TI_Index.h>
+#include <OMX_TI_Video.h>
 #include <omx_vfpc.h>
 #include "timm_osal_interfaces.h"
 
