@@ -57,6 +57,7 @@ struct _GstOmxH264Enc
   guint i_period;
   guint force_idr_period;
   gboolean force_idr;
+  gboolean is_interlaced;
   OMX_VIDEO_ENCODING_MODE_PRESETTYPE encodingPreset;
   OMX_VIDEO_RATECONTROL_PRESETTYPE rateControlPreset;
   gint cont;

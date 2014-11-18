@@ -295,6 +295,7 @@ gst_omx_h264_enc_init (GstOmxH264Enc * this)
   this->encodingPreset = GST_OMX_H264_ENC_PRESET_DEFAULT;
   this->rateControlPreset = GST_OMX_H264_ENC_RATE_CTRL_DEFAULT;
   this->cont = 0;
+  this->is_interlaced = FALSE;
 
   /* Add pads */
   this->sinkpad =
@@ -384,10 +385,10 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       return;
     }
 
-    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
-        targetBitRate = this->bitrate;
-    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
-        intraFrameInterval = this->i_period;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.
+        videnc2DynamicParams.targetBitRate = this->bitrate;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.
+        videnc2DynamicParams.intraFrameInterval = this->i_period;
     error_val =
         OMX_SetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
         &tDynParams);
@@ -478,17 +479,14 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
     goto invalidcaps;
   }
 
-  GST_DEBUG_OBJECT (this, "Reading stride");
-  if (!gst_structure_get_int (structure, "stride", &this->format.width_padded)) {
-    this->format.width_padded = GST_OMX_ALIGN (this->format.width, 16);
-  }
-
   GST_DEBUG_OBJECT (this, "Reading height");
   if (!gst_structure_get_int (structure, "height", &this->format.height)) {
     this->format.height = -1;
     goto invalidcaps;
   }
-  this->format.height_padded = GST_OMX_ALIGN (this->format.height, 16);
+  if (!gst_structure_get_boolean (structure, "interlaced",
+          &this->is_interlaced))
+    this->is_interlaced = FALSE;
 
   GST_DEBUG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
@@ -497,14 +495,6 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
     this->format.framerate_den = -1;
     goto invalidcaps;
   }
-
-  /* This is always fixed */
-  this->format.format = GST_VIDEO_FORMAT_NV12;
-
-  this->format.size_padded =
-      this->format.width_padded * this->format.height_padded * 1.5;
-  this->format.size = gst_video_format_get_size (this->format.format,
-      this->format.width, this->format.height);
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
@@ -532,10 +522,6 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
   gst_structure_get_int (srcstructure, "height", &this->format.height);
   gst_structure_get_fraction (srcstructure, "framerate",
       &this->format.framerate_num, &this->format.framerate_den);
-
-  g_value_init (&stride, G_TYPE_INT);
-  g_value_set_int (&stride, this->format.width_padded);
-  gst_structure_set_value (srcstructure, "stride", &stride);
 
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
 
@@ -589,12 +575,6 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   }
   /* TODO: Set here the notification type */
 
-  error = gst_omx_h264_enc_static_parameters (this,
-      GST_OMX_PAD (this->srcpad), &this->format);
-  if (GST_OMX_FAIL (error))
-    goto noconfiguration;
-
-
   GST_DEBUG_OBJECT (this, "Initializing sink pad memory");
   GST_OMX_INIT_STRUCT (&memory, OMX_PARAM_BUFFER_MEMORYTYPE);
   memory.nPortIndex = 0;
@@ -631,16 +611,16 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   port->nBufferCountActual = base->input_buffers;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
+  if (this->is_interlaced) {
+    port->format.video.nFrameHeight = this->format.height * 0.5;
+  }
   port->format.video.nStride = this->format.width;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
       this->format.framerate_den) << 16;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
   port->nBufferSize =           //this->format.size;
-      (port->format.video.nStride * port->format.video.nFrameHeight) +
-      (port->format.video.nStride *
-      ((port->format.video.nFrameHeight + 1) / 2));
-
+      (port->format.video.nStride * port->format.video.nFrameHeight) * 3 / 2;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE (this)->handle,
@@ -667,6 +647,11 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   port->nBufferSize = this->format.width * this->format.height;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
+
+  if (this->is_interlaced) {
+    port->format.video.nFrameHeight = this->format.height / 2;
+    port->nBufferSize = this->format.width * this->format.height / 2;
+  }
   port->format.video.nStride = 0;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
@@ -720,6 +705,13 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
       (gpointer) & GST_OMX_PAD (this->srcpad)->enabled, NULL);
   if (GST_OMX_FAIL (error))
     goto noenable;
+
+  error = gst_omx_h264_enc_static_parameters (this,
+      GST_OMX_PAD (this->srcpad), &this->format);
+  if (GST_OMX_FAIL (error))
+    goto noconfiguration;
+
+
 
   return error;
 
@@ -915,7 +907,57 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     goto nopreset;
 
 
+  if (this->is_interlaced) {
 
+    OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
+
+    g_print ("\n  interlaced enable \n");
+
+    GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
+
+    tStaticParam.nPortIndex = 1;
+
+    g_mutex_lock (&_omx_mutex);
+    OMX_GetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+    g_mutex_unlock (&_omx_mutex);
+
+    /* for interlace, base profile can not be used */
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        encodingPreset = XDM_USER_DEFINED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
+        IH264_HIGH_PROFILE;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.level =
+        IH264_LEVEL_42;
+
+    /* setting Interlace mode */
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        inputContentType = IVIDEO_INTERLACED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.bottomFieldIntra = 0;
+    tStaticParam.videoStaticParams.h264EncStaticParams.interlaceCodingType =
+        IH264_INTERLACE_FIELDONLY_ARF;
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        encodingPreset = XDM_DEFAULT;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        rateControlPreset = IVIDEO_STORAGE;
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
+        lumaIntra4x4Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
+        lumaIntra8x8Enable = 0x1f;
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto nointerlaced;
+
+
+  }
 
   return error;
 
@@ -941,6 +983,12 @@ nopreset:
 noiperiod:
   {
     GST_ERROR_OBJECT (this, "Unable to change statically i-period: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
+nointerlaced:
+  {
+    GST_ERROR_OBJECT (this, "Unable to set interlaced settings: %s",
         gst_omx_error_to_str (error));
     return error;
   }

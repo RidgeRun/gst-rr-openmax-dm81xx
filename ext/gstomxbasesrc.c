@@ -1137,9 +1137,6 @@ gst_omx_base_src_alloc_buffers (GstOmxBaseSrc * this, GstOmxPad * pad,
     return error;
   }
 
-  if (this->interlaced)
-    divided_buffers = TRUE;
-
   GST_DEBUG_OBJECT (this, "Allocating buffers for %s:%s",
       GST_DEBUG_PAD_NAME (GST_PAD (pad)));
 
@@ -1159,13 +1156,10 @@ gst_omx_base_src_alloc_buffers (GstOmxBaseSrc * this, GstOmxPad * pad,
     bufdata->buffer = NULL;
 
     if (currentbuffer) {
-      bufdata->id = ((GstOmxBufferData *) ((GstOmxBufTabNode *) currentbuffer->data)->buffer->pAppPrivate)->id + (!top_field) * pad->port->nBufferCountActual;  // Ensure bottom fields don't have the same ids as the top
+      bufdata->id = ((GstOmxBufferData *) ((GstOmxBufTabNode *) currentbuffer->data)->buffer->pAppPrivate)->id; // Ensure bottom fields don't have the same ids as the top
     } else {
       bufdata->id = i;
     }
-
-    if (divided_buffers)
-      top_field = !top_field;
 
     if (pbuffer) {
       GST_DEBUG_OBJECT (this, "Received buffer number %u:"

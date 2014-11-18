@@ -301,6 +301,7 @@ static gboolean
 gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
   GstOmxCamera *this = GST_OMX_CAMERA (src);
+  GstOmxBaseSrc *base = GST_OMX_BASE_SRC (this);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
   gchar *caps_str = NULL;
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -338,13 +339,22 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   /* This is fixed for testing with NV12 */
   this->format.format = GST_VIDEO_FORMAT_NV12;
   /* The right value is set with interlaced flag on output omx buffers */
-  this->format.interlaced = FALSE;
 
-  this->format.size_padded =
-      this->format.width_padded * this->format.height_padded * 1.5;
-  this->format.size = gst_video_format_get_size (this->format.format,
-      this->format.width, this->format.height);
+  if (!gst_structure_get_boolean (structure, "interlaced", &base->interlaced))
+    base->interlaced = FALSE;
 
+  if (base->interlaced) {
+    this->format.size_padded =
+        this->format.width_padded * (this->format.height_padded / 2) * 1.5;
+    this->format.size =
+        gst_video_format_get_size (this->format.format, this->format.width,
+        this->format.height / 2);
+  } else {
+    this->format.size_padded =
+        this->format.width_padded * this->format.height_padded * 1.5;
+    this->format.size = gst_video_format_get_size (this->format.format,
+        this->format.width, this->format.height);
+  }
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
       "\tFormat NV12\n"
@@ -554,6 +564,10 @@ gst_omx_camera_init_pads (GstOmxBaseSrc * base)
   port->nBufferCountActual = base->output_buffers;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height_padded;
+
+  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced)
+    port->format.video.nFrameHeight = port->format.video.nFrameHeight / 2;
+
   port->format.video.nStride = this->format.width_padded;
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
   port->format.video.eColorFormat =
@@ -567,7 +581,7 @@ gst_omx_camera_init_pads (GstOmxBaseSrc * base)
 
   port->nBufferSize =
       gst_omx_camera_get_buffer_size (this->format.format,
-      this->format.width_padded, this->format.height_padded);
+      this->format.width_padded, port->format.video.nFrameHeight);
 
   GST_DEBUG_OBJECT (this,
       "width= %li, height=%li, stride=%li, format %d, buffersize %li",
