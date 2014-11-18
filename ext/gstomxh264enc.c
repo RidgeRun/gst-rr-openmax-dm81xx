@@ -620,7 +620,7 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
       this->format.framerate_den) << 16;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
   port->nBufferSize =           //this->format.size;
-      (port->format.video.nStride * port->format.video.nFrameHeight) * 3 / 2;
+      (port->format.video.nStride * port->format.video.nFrameHeight) * 1.5;
 
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE (this)->handle,
@@ -910,8 +910,6 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
   if (this->is_interlaced) {
 
     OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
-
-    g_print ("\n  interlaced enable \n");
 
     GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
 
