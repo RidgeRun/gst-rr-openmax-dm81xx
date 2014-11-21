@@ -686,7 +686,7 @@ gst_omx_base_src_free_buffers (GstOmxBaseSrc * this, GstOmxPad * pad,
   guint i;
   GList *buffers;
 
-  buffer = gst_omx_buf_queue_pop_buffer (this->pending_buffers);
+  buffer = gst_omx_buf_queue_pop_buffer_no_wait (this->pending_buffers);
   while (buffer) {
     GST_LOG_OBJECT (this, "Cleaning pending queue of buffers");
     gst_omx_base_src_release_buffer ((gpointer) buffer);

@@ -392,7 +392,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   gst_structure_set_value (srcstructure, "stride", &stride);
 
   g_value_init (&interlaced, G_TYPE_BOOLEAN);
-  g_value_set_boolean (&interlaced, this->format.interlaced);
+  g_value_set_boolean (&interlaced, base->interlaced);
   gst_structure_set_value (srcstructure, "interlaced", &interlaced);
 
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
@@ -775,8 +775,8 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
   if (!caps)
     goto nocaps;
 
-
-  i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
+  /*FIXME: Set the interlaced flag correctly*/
+  /*  i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
   if (i != this->format.interlaced) {
     this->format.interlaced = i;
     caps = gst_caps_copy (GST_PAD_CAPS (GST_BASE_SRC_PAD (this)));
@@ -786,7 +786,7 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
           "interlaced", G_TYPE_BOOLEAN, this->format.interlaced, (char *) NULL);
     }
     gst_pad_set_caps (this->srcpad, caps);
-  }
+    }*/
 
   GST_BUFFER_SIZE (*buffer) = this->format.size_padded;
   GST_BUFFER_CAPS (*buffer) = caps;
