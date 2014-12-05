@@ -193,7 +193,6 @@ static void gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_h264_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-static void gst_omx_h264_enc_finalize (GObject * object);
 /* GObject vmethod implementations */
 
 /* initialize the omx's class */
@@ -438,26 +437,6 @@ gst_omx_h264_enc_get_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-}
-
-static void
-gst_omx_h264_enc_finalize (GObject * object)
-{
-  GstOmxH264Enc *this = GST_OMX_H264_ENC (object);
-
-  if (this->bitrate)
-    g_free (this->bitrate);
-  if (this->bytestream)
-    g_free (this->bytestream);
-  if (this->i_period)
-    g_free (this->i_period);
-  if (this->force_idr_period)
-    g_free (this->force_idr_period);
-  if (this->force_idr)
-    g_free (this->force_idr);
-
-  /* Chain up to the parent class */
-  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static gboolean

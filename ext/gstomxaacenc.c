@@ -123,8 +123,9 @@ static void gst_omx_aac_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_aac_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
+static OMX_ERRORTYPE gst_omx_aac_enc_init_pads (GstOmxBase * base);
 static OMX_ERRORTYPE gst_omx_aac_enc_parameters (GstOmxAACEnc * this, GstOmxFormat * format);
-
+static GstFlowReturn gst_omx_aac_enc_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf);
 
 
 /* initialize the omx's class */
@@ -170,11 +171,10 @@ gst_omx_aac_enc_class_init (GstOmxAACEncClass * klass)
 
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_aac_enc_set_caps);
-   /*
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_aac_enc_fill_callback);
   gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_aac_enc_init_pads);
-  */
+
   gstomxbase_class->handle_name = "OMX.TI.DSP.AUDENC";
 
   /* debug category for filtering log messages */
@@ -188,13 +188,15 @@ gst_omx_aac_enc_class_init (GstOmxAACEncClass * klass)
 static void
 gst_omx_aac_enc_init (GstOmxAACEnc * this)
 {
+  GstOmxBase *base = GST_OMX_BASE (this);
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   /* Initialize properties */
   this->bitrate = GST_OMX_AAC_ENC_BITRATE_DEFAULT;
   this->profile = GST_OMX_AAC_ENC_PROFILE_DEFAULT;
   this->output_format = GST_OMX_AAC_ENC_OUTPUT_FORMAT_DEFAULT;
- 
+  /*Set Audio flag*/
+  base->video = FALSE;
   /* Add pads */
   this->sinkpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
@@ -343,8 +345,6 @@ nosetcaps:
     return FALSE;
   }
 }
-
-
 
 
 
@@ -536,5 +536,70 @@ noAACParams:
     GST_ERROR_OBJECT (this, "Unable to change statically AACParams: %s",
         gst_omx_error_to_str (error));
     return error;
+  }
+}
+
+static GstFlowReturn
+gst_omx_aac_enc_fill_callback (GstOmxBase * base,
+    OMX_BUFFERHEADERTYPE * outbuf)
+{
+  GstOmxAACEnc *this = GST_OMX_AAC_ENC (base);
+  GstFlowReturn ret = GST_FLOW_OK;
+  GstBuffer *buffer = NULL;
+  GstCaps *caps = NULL;
+  GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
+
+  GST_LOG_OBJECT (this, "AAC Encoder Fill buffer callback");
+
+  caps = gst_pad_get_negotiated_caps (this->srcpad);
+  if (!caps)
+    goto nocaps;
+
+  buffer = gst_buffer_new ();
+  if (!buffer)
+    goto noalloc;
+
+  GST_BUFFER_SIZE (buffer) = outbuf->nFilledLen;
+  GST_BUFFER_CAPS (buffer) = caps;
+  GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
+  GST_BUFFER_MALLOCDATA (buffer) = (guint8 *) outbuf;
+  GST_BUFFER_FREE_FUNC (buffer) = gst_omx_base_release_buffer;
+
+  /* Make buffer fields GStreamer friendly */
+  GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
+  GST_BUFFER_DURATION (buffer) =
+    1e9 * 1 / this->format.rate;
+  GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
+  bufdata->buffer = buffer;
+
+  GST_LOG_OBJECT (this,
+      "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
+      GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
+      GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
+
+  GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
+      outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
+
+  ret = gst_pad_push (this->srcpad, buffer);
+  if (GST_FLOW_OK != ret)
+    goto nopush;
+
+  return ret;
+
+noalloc:
+  {
+    GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
+        ("Unable to allocate buffer to push"), (NULL));
+    return GST_FLOW_ERROR;
+  }
+nocaps:
+  {
+    GST_ERROR_OBJECT (this, "Unable to provide the requested caps");
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
+nopush:
+  {
+    GST_ERROR_OBJECT (this, "Unable to push buffer downstream: %d", ret);
+    return ret;
   }
 }
