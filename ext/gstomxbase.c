@@ -237,15 +237,26 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
 
   this->component = (OMX_COMPONENTTYPE *) this->handle;
 
-  GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
-  init.nPorts = 2;
-  init.nStartPortNumber = 0;
-  g_mutex_lock (&_omx_mutex);
-  error = OMX_SetParameter (this->handle, OMX_IndexParamVideoInit, &init);
-  g_mutex_unlock (&_omx_mutex);
-  if (error != OMX_ErrorNone)
-    goto initport;
-
+  if(this->video){
+    GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
+    init.nPorts = 2;
+    init.nStartPortNumber = 0;
+    g_mutex_lock (&_omx_mutex);
+    error = OMX_SetParameter (this->handle, OMX_IndexParamVideoInit, &init);
+    g_mutex_unlock (&_omx_mutex);
+    if (error != OMX_ErrorNone)
+      goto initport;
+  }
+  else{
+    GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
+    init.nPorts = 2;
+    init.nStartPortNumber = 0;
+    g_mutex_lock (&_omx_mutex);
+    error = OMX_SetParameter (this->handle, OMX_IndexParamAudioInit, &init);
+    g_mutex_unlock (&_omx_mutex);
+    if (error != OMX_ErrorNone)
+      goto initport;
+  }
   return error;
 
 noresources:
@@ -315,6 +326,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->started = FALSE;
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
+  this->video = TRUE;
 
   this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
   this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;

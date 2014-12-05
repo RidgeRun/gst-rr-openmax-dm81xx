@@ -28,7 +28,7 @@
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_AAC_ENC \
   (gst_omx_aac_enc_get_type())
-#define GST_OMX_aac_ENC(obj) \
+#define GST_OMX_AAC_ENC(obj) \
   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_AAC_ENC,GstOmxAACEnc))
 #define GST_OMX_AAC_ENC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_AAC_ENC,GstOmxAACEncClass))
@@ -47,8 +47,9 @@ struct _GstOmxAACEnc
   GstOmxFormat format;
 
   /* Properties */
+  guint rate;
+  guint channels;
   guint bitrate;
-  gint cont;
   gint profile;
   gint output_format;
 };

@@ -62,6 +62,7 @@ struct _GstOmxBase
   gboolean started;
   gboolean first_buffer;
   gboolean interlaced;
+  gboolean video;
 
   OMX_STATETYPE state;
   GMutex waitmutex;

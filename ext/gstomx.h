@@ -51,6 +51,7 @@ typedef OMX_ERRORTYPE (*GstOmxFillBufferDone) (OMX_HANDLETYPE,
 
 struct _GstOmxFormat
 {
+  /*Video*/
   gint width;
   gint width_padded;            //aka: stride, pitch
   gint height;
@@ -63,6 +64,10 @@ struct _GstOmxFormat
   guint size;
   guint size_padded;
   gboolean interlaced;
+  /*Audio*/
+  guint rate;
+  guint channels;
+
 };
 
 struct _GstOmxBufferData

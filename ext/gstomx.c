@@ -31,9 +31,11 @@
 #include "gstomxmpeg2dec.h"
 #include "gstomxh264dec.h"
 #include "gstomxh264enc.h"
+#include "gstomxaacenc.h"
 #include "gstomxscaler.h"
 #include "gstomxdeiscaler.h"
 #include "gstomxcamera.h"
+
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -79,6 +81,10 @@ omx_init (GstPlugin * omx)
           GST_TYPE_OMX_H264_ENC))
     return FALSE;
 
+  if (!gst_element_register (omx, "omx_aacenc", GST_RANK_NONE,
+          GST_TYPE_OMX_AAC_ENC))
+    return FALSE;
+
   if (!gst_element_register (omx, "omx_scaler", GST_RANK_NONE,
           GST_TYPE_OMX_SCALER))
     return FALSE;
@@ -93,6 +99,7 @@ omx_init (GstPlugin * omx)
   if (!gst_element_register (omx, "omx_camera", GST_RANK_NONE,
           GST_TYPE_OMX_CAMERA))
     return FALSE;
+
   return TRUE;
 }
 
