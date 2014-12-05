@@ -679,9 +679,6 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
 
 
 
-
-
-
   GST_INFO_OBJECT (this, "Enabling input port");
   g_mutex_lock (&_omx_mutex);
   OMX_SendCommand (base->handle, OMX_CommandPortEnable, 0, NULL);
