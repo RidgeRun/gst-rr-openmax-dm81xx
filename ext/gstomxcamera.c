@@ -303,8 +303,6 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   GstOmxCamera *this = GST_OMX_CAMERA (src);
   GstOmxBaseSrc *base = GST_OMX_BASE_SRC (this);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
-  gchar *caps_str = NULL;
-  OMX_ERRORTYPE error = OMX_ErrorNone;
 
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
@@ -412,12 +410,6 @@ nosetcaps:
     GST_ERROR_OBJECT (this, "Src pad didn't accept new caps");
     return FALSE;
   }
-nopads:
-  {
-    GST_ERROR_OBJECT (this, "Unable to initializate ports: %s",
-        gst_omx_error_to_str (error));
-    return FALSE;
-  }
 }
 
 /* Following caps negotiation related functions were taken from the 
@@ -428,9 +420,7 @@ static void
 gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
 {
   GstStructure *structure;
-  guint32 format;
   gint i;
-  guint32 fourcc;
 
   GST_DEBUG_OBJECT (basesrc, "fixating caps %" GST_PTR_FORMAT, caps);
   caps = gst_caps_make_writable (caps);
@@ -767,16 +757,14 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
 
   GstOmxCamera *this = GST_OMX_CAMERA (base);
   GstOmxBufferData *bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
-  gboolean i = FALSE;
-  GstStructure *structure = NULL;
   GstCaps *caps = NULL;
 
   caps = gst_pad_get_negotiated_caps (this->srcpad);
   if (!caps)
     goto nocaps;
 
-  /*FIXME: Set the interlaced flag correctly*/
-  /*  i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
+  /*FIXME: Set the interlaced flag correctly */
+  i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
   if (i != this->format.interlaced) {
     this->format.interlaced = i;
     caps = gst_caps_copy (GST_PAD_CAPS (GST_BASE_SRC_PAD (this)));
@@ -786,9 +774,8 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
           "interlaced", G_TYPE_BOOLEAN, this->format.interlaced, (char *) NULL);
     }
     gst_pad_set_caps (this->srcpad, caps);
-    }*/
-
-  GST_BUFFER_SIZE (*buffer) = this->format.size_padded;
+  }
+  */GST_BUFFER_SIZE (*buffer) = this->format.size_padded;
   GST_BUFFER_CAPS (*buffer) = caps;
   GST_BUFFER_DATA (*buffer) = omx_buf->pBuffer;
   GST_BUFFER_MALLOCDATA (*buffer) = (guint8 *) omx_buf;

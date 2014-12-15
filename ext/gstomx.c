@@ -32,6 +32,7 @@
 #include "gstomxh264dec.h"
 #include "gstomxh264enc.h"
 #include "gstomxaacenc.h"
+#include "gstomxaacdec.h"
 #include "gstomxscaler.h"
 #include "gstomxdeiscaler.h"
 #include "gstomxcamera.h"
@@ -52,6 +53,7 @@ omx_init (GstPlugin * omx)
   g_mutex_init (&_omx_mutex);
 
 #if 0
+  ConfigureUIA uiaCfg;
   uiaCfg.enableAnalysisEvents = 0;
   /* can be 0 or 1 */
   uiaCfg.enableStatusLogger = 1;
@@ -76,13 +78,17 @@ omx_init (GstPlugin * omx)
   if (!gst_element_register (omx, "omx_h264dec", GST_RANK_NONE,
           GST_TYPE_OMX_H264_DEC))
     return FALSE;
-  
+
   if (!gst_element_register (omx, "omx_h264enc", GST_RANK_NONE,
           GST_TYPE_OMX_H264_ENC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_aacenc", GST_RANK_NONE,
           GST_TYPE_OMX_AAC_ENC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_aacdec", GST_RANK_NONE,
+          GST_TYPE_OMX_AAC_DEC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_scaler", GST_RANK_NONE,

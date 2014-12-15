@@ -188,7 +188,7 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
   g_object_class_install_property (gobject_class, PROP_PEER_ALLOC,
       g_param_spec_boolean ("peer-alloc",
           "Try to use buffers from downstream element",
-          "Try to use buffers from downstream element", TRUE,
+          "Try to use buffers from downstream element", FALSE,
           G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_NUM_INPUT_BUFFERS,
@@ -237,7 +237,8 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
 
   this->component = (OMX_COMPONENTTYPE *) this->handle;
 
-  if(this->video){
+  if (!strstr (handle_name, "DSP")) {
+    GST_INFO ("Video component");
     GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
     init.nPorts = 2;
     init.nStartPortNumber = 0;
@@ -246,8 +247,8 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
     g_mutex_unlock (&_omx_mutex);
     if (error != OMX_ErrorNone)
       goto initport;
-  }
-  else{
+  } else {
+    GST_INFO ("Audio component");
     GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
     init.nPorts = 2;
     init.nStartPortNumber = 0;
@@ -321,12 +322,11 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   this->requested_size = 0;
-  this->peer_alloc = TRUE;
+  this->peer_alloc = FALSE;
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
-  this->video = TRUE;
 
   this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
   this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;
@@ -489,7 +489,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
 /* We need to grab a reference for the buffer since EmptyThisBuffer callback might 
 return before we check if the buffer is interlaced */
-  bufdata->buffer = gst_buffer_ref (buf);       
+  bufdata->buffer = gst_buffer_ref (buf);
 
   if (this->interlaced)
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE;
@@ -846,6 +846,7 @@ static OMX_ERRORTYPE
 gst_omx_base_stop (GstOmxBase * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
 
   if (!this->started)
     goto alreadystopped;
@@ -854,13 +855,15 @@ gst_omx_base_stop (GstOmxBase * this)
     GST_OBJECT_LOCK (this);
     this->flushing = TRUE;
     GST_OBJECT_UNLOCK (this);
-
-    GST_INFO_OBJECT (this, "Flushing ports");
-    error =
-        gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
-        GST_PAD_UNKNOWN, NULL);
-    if (GST_OMX_FAIL (error))
-      goto noflush;
+    /* TODO: DSP does not support flush ports */
+    if (!strstr (klass->handle_name, "DSP")) {
+      GST_INFO_OBJECT (this, "Flushing ports");
+      error =
+          gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+          GST_PAD_UNKNOWN, NULL);
+      if (GST_OMX_FAIL (error))
+        goto noflush;
+    }
   }
   GST_INFO_OBJECT (this, "Sending handle to Idle");
   g_mutex_lock (&_omx_mutex);
@@ -945,6 +948,12 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
     return ret;
 
   switch (transition) {
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+      /*Dont try to push any more buffers */
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+      break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_omx_base_stop (this);
       break;
@@ -1799,6 +1808,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 {
 
   GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (G_UNLIKELY (this == NULL)) {
@@ -1817,11 +1827,14 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
       GST_OBJECT_LOCK (this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
-      error =
-          gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
-          GST_PAD_UNKNOWN, NULL);
-      if (GST_OMX_FAIL (error))
-        goto noflush_eos;
+      /* TODO: DSP does not support flush ports */
+      if (!strstr (klass->handle_name, "DSP")) {
+        error =
+            gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+            GST_PAD_UNKNOWN, NULL);
+        if (GST_OMX_FAIL (error))
+          goto noflush_eos;
+      }
       break;
     }
     default:

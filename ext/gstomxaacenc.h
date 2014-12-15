@@ -47,8 +47,8 @@ struct _GstOmxAACEnc
   GstOmxFormat format;
 
   /* Properties */
-  guint rate;
-  guint channels;
+  gint rate;
+  gint channels;
   guint bitrate;
   gint profile;
   gint output_format;
@@ -62,5 +62,4 @@ struct _GstOmxAACEncClass
 GType gst_omx_aac_enc_get_type (void);
 
 G_END_DECLS
-
 #endif /* __GST_OMX_AAC_ENC_H__ */

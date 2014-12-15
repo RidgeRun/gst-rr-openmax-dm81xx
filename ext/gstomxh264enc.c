@@ -384,10 +384,10 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       return;
     }
 
-    tDynParams.videoDynamicParams.h264EncDynamicParams.
-        videnc2DynamicParams.targetBitRate = this->bitrate;
-    tDynParams.videoDynamicParams.h264EncDynamicParams.
-        videnc2DynamicParams.intraFrameInterval = this->i_period;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        targetBitRate = this->bitrate;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        intraFrameInterval = this->i_period;
     error_val =
         OMX_SetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
         &tDynParams);
@@ -898,29 +898,29 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
 
     /* for interlace, base profile can not be used */
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        encodingPreset = XDM_USER_DEFINED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_USER_DEFINED;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
         IH264_HIGH_PROFILE;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.level =
         IH264_LEVEL_42;
 
     /* setting Interlace mode */
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        inputContentType = IVIDEO_INTERLACED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.inputContentType = IVIDEO_INTERLACED;
     tStaticParam.videoStaticParams.h264EncStaticParams.bottomFieldIntra = 0;
     tStaticParam.videoStaticParams.h264EncStaticParams.interlaceCodingType =
         IH264_INTERLACE_FIELDONLY_ARF;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        encodingPreset = XDM_DEFAULT;
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        rateControlPreset = IVIDEO_STORAGE;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_DEFAULT;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.rateControlPreset = IVIDEO_STORAGE;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
-        lumaIntra4x4Enable = 0x1f;
-    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
-        lumaIntra8x8Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra4x4Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra8x8Enable = 0x1f;
 
     g_mutex_lock (&_omx_mutex);
     error =

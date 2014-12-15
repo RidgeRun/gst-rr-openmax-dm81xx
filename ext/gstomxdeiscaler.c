@@ -232,7 +232,7 @@ gst_omx_deiscaler_init (GstOmxDeiscaler * this)
     } else {
       gst_object_ref (pad);
       this->srcpads = g_list_append (this->srcpads, pad);
-      if (! (strcmp (templ->name_template, "src_00")))
+      if (!(strcmp (templ->name_template, "src_00")))
         GST_OMX_PAD_PORT (GST_OMX_PAD (pad))->nPortIndex =
             OMX_VFPC_OUTPUT_PORT_START_INDEX;
       else
@@ -853,8 +853,8 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
       1e9 * out_format->framerate_den / out_format->framerate_num;
 
   GST_LOG_OBJECT (this, "Pushing buffer to %s:%s", GST_DEBUG_PAD_NAME (srcpad));
-  GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);  
- 
+  GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
+
   ret = gst_pad_push (srcpad, buffer);
   if (GST_FLOW_OK != ret)
     goto nopush;
