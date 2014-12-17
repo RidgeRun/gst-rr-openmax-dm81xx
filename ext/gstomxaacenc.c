@@ -295,6 +295,7 @@ static gboolean
 gst_omx_aac_enc_set_caps (GstPad * pad, GstCaps * caps)
 {
   GstOmxAACEnc *this = GST_OMX_AAC_ENC (GST_OBJECT_PARENT (pad));
+  GstOmxBase *base = GST_OMX_BASE (this);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
