@@ -763,8 +763,8 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
   if (!caps)
     goto nocaps;
 
-  /*FIXME: Set the interlaced flag correctly */
-  i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
+  /*FIXME: Set the interlaced flag correctly*/
+/*    i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
   if (i != this->format.interlaced) {
     this->format.interlaced = i;
     caps = gst_caps_copy (GST_PAD_CAPS (GST_BASE_SRC_PAD (this)));

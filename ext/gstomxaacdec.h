@@ -45,7 +45,10 @@ struct _GstOmxAACDec
 
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
-
+  gboolean framed;
+  gint mpegversion;
+  gint aacversion;
+  
   /* Properties */
   gboolean framemode;
 };
