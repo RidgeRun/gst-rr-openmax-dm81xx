@@ -30,32 +30,32 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_aac_dec_debug);
 #define GST_CAT_DEFAULT gst_omx_aac_dec_debug
 
 
-
-static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
+static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("audio/x-raw-int," "endianness=1234," "width=16," 
-		     "depth=16," "rate=[8000,96000]," "signed=true," "channels=[1,8]")
+    GST_STATIC_CAPS ("audio/mpeg,"
+        "mpegversion = {2,4}," "channels=  [1,8]," "rate = [8000,96000],"
+        "object_type = [1,6]," "parsed=true")
     );
 
-static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
+static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("audio/mpeg,"
-        "mpegversion = {2,4}," "rate = [8000,96000]," "channels=  [1,8]," "object_type=[1,6]," "parsed=true")
+    GST_STATIC_CAPS ("audio/x-raw-int," "endianness=1234," "width=16,"
+        "depth=16," "rate=[8000,96000]," "signed=true," "channels=[1,8]")
     );
 
 typedef enum
 {
-	AAC_PROFILE_LC = 2,
-	AAC_PROFILE_LC_SBR = 5,
-	AAC_PROFILE_LC_SBR_PS = 6,
+  AAC_PROFILE_LC = 2,
+  AAC_PROFILE_LC_SBR = 5,
+  AAC_PROFILE_LC_SBR_PS = 6,
 } AacVersion;
 
 enum
 {
-	PROP_0,
-	PROP_FRAMEMODE,
+  PROP_0,
+  PROP_FRAMEMODE,
 };
 
 
@@ -72,8 +72,10 @@ static void gst_omx_aac_dec_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static OMX_ERRORTYPE gst_omx_aac_dec_init_pads (GstOmxBase * base);
 
-static GstFlowReturn gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf);
-static OMX_ERRORTYPE gst_omx_aac_dec_parameters (GstOmxAACDec * this, GstOmxFormat * format);
+static GstFlowReturn gst_omx_aac_dec_fill_callback (GstOmxBase * base,
+    OMX_BUFFERHEADERTYPE * outbuf);
+static OMX_ERRORTYPE gst_omx_aac_dec_parameters (GstOmxAACDec * this,
+    GstOmxFormat * format);
 static OMX_ERRORTYPE gst_omx_aac_dec_init_pads (GstOmxBase * base);
 
 /* initialize the omx's class */
@@ -95,20 +97,21 @@ gst_omx_aac_dec_class_init (GstOmxAACDecClass * klass)
       "Jose Jimenez <jose.jimenez@ridgerun.com>");
 
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
+  gst_element_class_add_pad_template (gstelement_class,
+      gst_static_pad_template_get (&src_template));
 
   gobject_class->set_property = gst_omx_aac_dec_set_property;
   gobject_class->get_property = gst_omx_aac_dec_get_property;
 
 
   g_object_class_install_property (gobject_class, PROP_FRAMEMODE,
-				   g_param_spec_boolean ("framemode", "Frame Mode",
-							 "Frame Mode", GST_OMX_AAC_DEC_FRAMEMODE_DEFAULT, G_PARAM_READWRITE));
-  
+      g_param_spec_boolean ("framemode", "Frame Mode",
+          "Frame Mode", GST_OMX_AAC_DEC_FRAMEMODE_DEFAULT, G_PARAM_READWRITE));
 
-  gstomxbase_class->omx_fill_buffer = GST_DEBUG_FUNCPTR (gst_omx_aac_dec_fill_callback);
+
+  gstomxbase_class->omx_fill_buffer =
+      GST_DEBUG_FUNCPTR (gst_omx_aac_dec_fill_callback);
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_aac_dec_set_caps);
   gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_aac_dec_init_pads);
 
@@ -130,7 +133,7 @@ gst_omx_aac_dec_init (GstOmxAACDec * this)
 
   /* Initialize properties */
   this->framemode = GST_OMX_AAC_DEC_FRAMEMODE_DEFAULT;
-  /*Set Audio flag*/
+  /*Set Audio flag */
   base->output_buffers = 1;
   base->input_buffers = 1;
   /* Add pads */
@@ -157,14 +160,14 @@ gst_omx_aac_dec_set_property (GObject * object, guint prop_id,
   GstOmxAACDec *this = GST_OMX_AAC_DEC (object);
 
   switch (prop_id) {
-  case PROP_FRAMEMODE:
-    this->framemode = g_value_get_boolean (value);
-    GST_INFO_OBJECT (this, "Setting framemode to %d", this->framemode);
-    break;
-  default:
-    G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-    break;
-  } 
+    case PROP_FRAMEMODE:
+      this->framemode = g_value_get_boolean (value);
+      GST_INFO_OBJECT (this, "Setting framemode to %d", this->framemode);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
 }
 
 
@@ -175,12 +178,12 @@ gst_omx_aac_dec_get_property (GObject * object, guint prop_id,
   GstOmxAACDec *this = GST_OMX_AAC_DEC (object);
 
   switch (prop_id) {
-  case PROP_FRAMEMODE:
-    g_value_set_boolean (value, this->framemode);
-    break;
-  default:
-    G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-    break;
+    case PROP_FRAMEMODE:
+      g_value_set_boolean (value, this->framemode);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
   }
 }
 
@@ -193,44 +196,41 @@ gst_omx_aac_dec_set_caps (GstPad * pad, GstCaps * caps)
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
   GstCaps *newcaps = NULL;
-  
+
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
-  
+
   GST_DEBUG_OBJECT (this, "Reading Rate");
   if (!gst_structure_get_int (structure, "rate", &this->format.rate)) {
     this->format.rate = -1;
     goto invalidcaps;
   }
-  
+
   GST_DEBUG_OBJECT (this, "Reading Channels");
   if (!gst_structure_get_int (structure, "channels", &this->format.channels)) {
     this->format.channels = -1;
     goto invalidcaps;
   }
-  
+
   GST_DEBUG_OBJECT (this, "Reading object type ");
   if (!gst_structure_get_int (structure, "object_type", &this->aacversion)) {
-    this->aacversion = -1;
-    goto invalidcaps;
+    this->aacversion = AAC_PROFILE_LC;
   }
 
   GST_DEBUG_OBJECT (this, "Reading mpegversion");
   if (!gst_structure_get_int (structure, "mpegversion", &this->mpegversion)) {
-    this->mpegversion = -1;
+    this->mpegversion = 4;
     goto invalidcaps;
   }
-  
+
   this->framed = gst_structure_has_field (structure, "framed");
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tRate:  %u\n"
       "\tChannels %u\n"
-       "\tobject_type:  %u\n"
-       "\tMpegversion:  %u\n",
+      "\tobject_type:  %u\n"
+      "\tMpegversion:  %u\n",
       this->format.rate,
-      this->format.channels,
-      this->aacversion,
-      this->mpegversion);
+      this->format.channels, this->aacversion, this->mpegversion);
 
   /* Ask for the output caps, if not fixed then try the biggest frame */
   allowedcaps = gst_pad_get_allowed_caps (this->srcpad);
@@ -244,7 +244,7 @@ gst_omx_aac_dec_set_caps (GstPad * pad, GstCaps * caps)
 
   gst_structure_fixate_field_nearest_int (srcstructure, "channels",
       this->format.channels);
-  
+
   gst_structure_get_int (srcstructure, "rate", &this->format.rate);
   gst_structure_get_int (srcstructure, "channels", &this->format.channels);
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
@@ -279,17 +279,28 @@ gst_omx_aac_dec_init_pads (GstOmxBase * base)
   GST_DEBUG_OBJECT (this, "Initializing sink pad port");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->sinkpad));
 
-  port->nPortIndex = 0;      
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_GetParameter (GST_OMX_BASE (this)->handle,
+      OMX_IndexParamPortDefinition, port);
+  g_mutex_unlock (&_omx_mutex);
+  if (error != OMX_ErrorNone) {
+    portname = "input";
+    goto noport;
+  }
+
+  port->nPortIndex = 0;
+
   port->eDir = OMX_DirInput;
   port->nBufferCountActual = base->input_buffers;
+  port->nBufferCountMin = 1;
   port->eDomain = OMX_PortDomainAudio;
   port->bEnabled = OMX_TRUE;
   port->bPopulated = OMX_FALSE;
   port->eDomain = OMX_PortDomainAudio;
   port->bBuffersContiguous = OMX_FALSE;
   port->nBufferAlignment = 32;
-  port->nBufferSize = 4096; /* 4608 Recommended buffer size */
-  port->format.audio.eEncoding = OMX_AUDIO_CodingAAC; 
+  port->nBufferSize = 4096;     /* 4096 Recommended buffer size */
+  port->format.audio.eEncoding = OMX_AUDIO_CodingAAC;
   port->format.audio.cMIMEType = "ADEC";
   port->format.audio.pNativeRender = NULL;
   port->format.audio.bFlagErrorConcealment = OMX_FALSE;
@@ -300,7 +311,7 @@ gst_omx_aac_dec_init_pads (GstOmxBase * base)
   g_mutex_unlock (&_omx_mutex);
 
   if (error != OMX_ErrorNone) {
-    portname = "output";
+    portname = "input";
     goto noport;
   }
 
@@ -308,24 +319,35 @@ gst_omx_aac_dec_init_pads (GstOmxBase * base)
   GST_DEBUG_OBJECT (this, "Initializing src pad port");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->srcpad));
 
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_GetParameter (GST_OMX_BASE (this)->handle,
+      OMX_IndexParamPortDefinition, port);
+  g_mutex_unlock (&_omx_mutex);
+  if (error != OMX_ErrorNone) {
+    portname = "output";
+    goto noport;
+  }
+
   port->nPortIndex = 1;
   port->eDir = OMX_DirOutput;
   port->nBufferCountActual = base->output_buffers;
-  port->nBufferSize = 8192; /*  4096 Recommended buffer size */
+  port->nBufferCountMin = 1;
+  port->nBufferSize = 4608;     /*  8192 Recommended buffer size */
   port->bEnabled = OMX_TRUE;
   port->bPopulated = OMX_FALSE;
   port->eDomain = OMX_PortDomainAudio;
   port->bBuffersContiguous = OMX_FALSE;
-  port->nBufferAlignment = 32;  
-  port->format.audio.eEncoding = OMX_AUDIO_CodingPCM;
+  port->nBufferAlignment = 32;
+  port->format.audio.eEncoding = OMX_AUDIO_CodingUnused;
   port->format.audio.cMIMEType = "PCM";
-  port->format.audio.bFlagErrorConcealment = OMX_FALSE;	
+  port->format.audio.pNativeRender = NULL;
+  port->format.audio.bFlagErrorConcealment = OMX_FALSE;
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE (this)->handle,
       OMX_IndexParamPortDefinition, port);
   g_mutex_unlock (&_omx_mutex);
   if (error != OMX_ErrorNone) {
-    portname = "input";
+    portname = "output";
     goto noport;
   }
 
@@ -382,36 +404,30 @@ noenable:
 
 
 static OMX_ERRORTYPE
-gst_omx_aac_dec_parameters (GstOmxAACDec * this,
-    GstOmxFormat * format)
+gst_omx_aac_dec_parameters (GstOmxAACDec * this, GstOmxFormat * format)
 {
   GstOmxBase *base = GST_OMX_BASE (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
-  OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
+
   OMX_AUDIO_PARAM_AACPROFILETYPE aac_param;
 
-  
   /* AAC configuration. */
   GST_DEBUG_OBJECT (this, "Setting encoder AAC Parameters");
   GST_DEBUG_OBJECT (this,
-		    "Configuring static parameters on input port: rate=%d, channels=%d,"
-		    "profile=%d ", format->rate, format->channels, 
-		     this->aacversion);
+      "Configuring static parameters on input port: rate=%d, channels=%d,"
+      "profile=%d ", format->rate, format->channels, this->aacversion);
 
-  
   GST_OMX_INIT_STRUCT (&aac_param, OMX_AUDIO_PARAM_AACPROFILETYPE);
-  aac_param.nPortIndex=0;  
+  aac_param.nPortIndex = 0;
+
   g_mutex_lock (&_omx_mutex);
-  OMX_GetParameter (base->handle, OMX_IndexParamAudioAac,
-		    &aac_param);
+  OMX_GetParameter (base->handle, OMX_IndexParamAudioAac, &aac_param);
   g_mutex_unlock (&_omx_mutex);
-  
 
   aac_param.nSampleRate = format->rate;
   aac_param.nChannels = format->channels;
-  
-  switch (this->aacversion)
-    {
+
+  switch (this->aacversion) {
     case AAC_PROFILE_LC_SBR_PS:
       aac_param.eAACProfile = OMX_AUDIO_AACObjectHE_PS;
       break;
@@ -424,53 +440,50 @@ gst_omx_aac_dec_parameters (GstOmxAACDec * this,
     default:
       aac_param.eAACProfile = OMX_AUDIO_AACObjectLC;
       break;
-    }
-  
-  if(this->framed)
-    {
-      aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatRAW;
-      GST_DEBUG_OBJECT (this, "Format: Raw");
-    }
-  else
-    {
-      aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMax;
-      GST_DEBUG_OBJECT (this, "Format: Max");
-    }  
+  }
+
+  if (this->framed) {
+    aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatRAW;
+    GST_DEBUG_OBJECT (this, "Format: Raw");
+  } else {
+    aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMax;
+    GST_DEBUG_OBJECT (this, "Format: Max");
+  }
 
   g_mutex_lock (&_omx_mutex);
-  error =
-    OMX_SetParameter (base->handle,  OMX_IndexParamAudioAac, &aac_param);
+  error = OMX_SetParameter (base->handle, OMX_IndexParamAudioAac, &aac_param);
   g_mutex_unlock (&_omx_mutex);
   if (GST_OMX_FAIL (error))
     goto noAACParams;
 
   GST_DEBUG_OBJECT (this, "Setting encoder PCM Parameters");
   GST_DEBUG_OBJECT (this,
-		    "Configuring static parameters on output port: rate=%d, channels=%d",
-		    format->rate, format->channels);
+      "Configuring static parameters on output port: rate=%d, channels=%d",
+      format->rate, format->channels);
 
- /* PCM configuration. */
-  
-  GST_OMX_INIT_STRUCT (&pcm_param, OMX_AUDIO_PARAM_PCMMODETYPE);
-  pcm_param.nPortIndex=1; 
- 
-  g_mutex_lock (&_omx_mutex);
-  OMX_GetParameter (base->handle, (OMX_INDEXTYPE) OMX_IndexParamAudioPcm,
-		    &pcm_param);
-  g_mutex_unlock (&_omx_mutex);
-  
+  /* PCM configuration. */
+  /*FIXME: Port configuration fails when setting output parameters */
+  /*
+     OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
+     GST_OMX_INIT_STRUCT (&pcm_param, OMX_AUDIO_PARAM_PCMMODETYPE);
 
-  pcm_param.nSamplingRate = format->rate;
-  pcm_param.nChannels = format->channels;
-  
-  g_mutex_lock (&_omx_mutex);
-  error = OMX_SetParameter (base->handle, OMX_IndexParamAudioPcm, 
-			    &pcm_param);
-  g_mutex_unlock (&_omx_mutex);
-  if (GST_OMX_FAIL (error))
-    goto noPCMParams;
+     pcm_param.nPortIndex=1;  
+     g_mutex_lock (&_omx_mutex);
+     OMX_GetParameter (base->handle, OMX_IndexParamAudioPcm,
+     &pcm_param);
+     g_mutex_unlock (&_omx_mutex);
 
+     pcm_param.nSamplingRate = format->rate;
+     pcm_param.nChannels = format->channels;
 
+     g_mutex_lock (&_omx_mutex);
+     error = OMX_SetParameter (base->handle, OMX_IndexParamAudioPcm,
+     &pcm_param);
+     g_mutex_unlock (&_omx_mutex);
+     if (GST_OMX_FAIL (error))
+     goto noPCMParams;
+
+   */
 
   return error;
 
@@ -490,8 +503,7 @@ noAACParams:
 
 
 static GstFlowReturn
-gst_omx_aac_dec_fill_callback (GstOmxBase * base,
-    OMX_BUFFERHEADERTYPE * outbuf)
+gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxAACDec *this = GST_OMX_AAC_DEC (base);
   GstFlowReturn ret = GST_FLOW_OK;
@@ -517,8 +529,7 @@ gst_omx_aac_dec_fill_callback (GstOmxBase * base,
 
   /* Make buffer fields GStreamer friendly */
   GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
-  GST_BUFFER_DURATION (buffer) =
-    1e9 * 1 / this->format.rate;
+  GST_BUFFER_DURATION (buffer) = 1e9 * 1 / this->format.rate;
   GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
   bufdata->buffer = buffer;
 

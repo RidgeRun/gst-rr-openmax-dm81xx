@@ -48,7 +48,7 @@ struct _GstOmxAACDec
   gboolean framed;
   gint mpegversion;
   gint aacversion;
-  
+
   /* Properties */
   gboolean framemode;
 };

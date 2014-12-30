@@ -75,11 +75,11 @@ gst_omx_aac_enc_profile_get_type (void)
       {OMX_AUDIO_AACObjectHE, "High Efficiency with SBR (HE-AAC v1)", "HE"},
       {OMX_AUDIO_AACObjectScalable, "Scalable", "Scalable"},
       {OMX_AUDIO_AACObjectERLC,
-            "ER AAC Low Complexity object (Error Resilient AAC-LC)", "ERLC"},
+          "ER AAC Low Complexity object (Error Resilient AAC-LC)", "ERLC"},
       {OMX_AUDIO_AACObjectLD, "AAC Low Delay object (Error Resilient)", "LD"},
       {OMX_AUDIO_AACObjectHE_PS,
             "High Efficiency with Parametric Stereo coding (HE-AAC v2, object type PS)",
-            "HE_PS"},
+          "HE_PS"},
       {0, NULL, NULL},
     };
 
@@ -98,16 +98,16 @@ gst_omx_aac_enc_output_format_get_type (void)
   if (!gst_omx_aac_enc_output_format_type) {
     static GEnumValue gst_omx_aac_enc_output_format[] = {
       {OMX_AUDIO_AACStreamFormatMP2ADTS, "Audio Data Transport Stream 2 format",
-            "MP2ADTS"},
+          "MP2ADTS"},
       {OMX_AUDIO_AACStreamFormatMP4ADTS, "Audio Data Transport Stream 4 format",
-            "MP4ADTS"},
+          "MP4ADTS"},
       {OMX_AUDIO_AACStreamFormatMP4LOAS, "Low Overhead Audio Stream format",
-            "MP4LOAS"},
+          "MP4LOAS"},
       {OMX_AUDIO_AACStreamFormatMP4LATM,
-            "Low overhead Audio Transport Multiplex", "MP4LATM"},
+          "Low overhead Audio Transport Multiplex", "MP4LATM"},
       {OMX_AUDIO_AACStreamFormatADIF, "Audio Data Interchange Format", "ADIF"},
       {OMX_AUDIO_AACStreamFormatMP4FF, "AAC inside MPEG-4/ISO File Format",
-            "MP4FF"},
+          "MP4FF"},
       {OMX_AUDIO_AACStreamFormatRAW, "AAC Raw Format", "RAW"},
       {OMX_AUDIO_AACStreamFormatMax, "AAC Stream format MAX", "MAX"},
       {0, NULL, NULL},
@@ -140,7 +140,7 @@ static OMX_ERRORTYPE gst_omx_aac_enc_parameters (GstOmxAACEnc * this,
 static GstFlowReturn gst_omx_aac_enc_fill_callback (GstOmxBase * base,
     OMX_BUFFERHEADERTYPE * outbuf);
 static gint gst_omx_aac_enc_get_rateIdx (guint rate);
-static GstBuffer *gst_omx_aac_enc_generate_codec_data (GstOmxBase *base);
+static GstBuffer *gst_omx_aac_enc_generate_codec_data (GstOmxBase * base);
 
 /* initialize the omx's class */
 static void
@@ -333,43 +333,48 @@ gst_omx_aac_enc_set_caps (GstPad * pad, GstCaps * caps)
       this->format.channels);
   this->channels = this->format.channels;
   gst_structure_fixate_field_nearest_int (srcstructure, "mpegversion",
-					this->profile);
-  if (gst_structure_has_field(srcstructure, "stream-format")) {
-    GST_INFO_OBJECT(this,"Setting format");
-    switch(this->output_format){
-    case OMX_AUDIO_AACStreamFormatRAW:
-      gst_structure_fixate_field_string(srcstructure,"stream-format","raw");
-      break;
-    case OMX_AUDIO_AACStreamFormatMP2ADTS:
-      gst_structure_fixate_field_string(srcstructure,"stream-format","adts");
-      break;
-    case OMX_AUDIO_AACStreamFormatMP4ADTS:
-      gst_structure_fixate_field_string(srcstructure,"stream-format","adts");
-      break;
-    case OMX_AUDIO_AACStreamFormatMP4LOAS:
-      gst_structure_fixate_field_string(srcstructure,"stream-format","loas");
-      break;
-    case OMX_AUDIO_AACStreamFormatMP4LATM:
-      gst_structure_fixate_field_string(srcstructure,"stream-format","latm");
-      break;
-    case OMX_AUDIO_AACStreamFormatADIF:
-    gst_structure_fixate_field_string(srcstructure,"stream-format","adif");
-    break;
-    default:
-      GST_INFO_OBJECT(this,"Invalid format");
-      break;
+      this->profile);
+  if (gst_structure_has_field (srcstructure, "stream-format")) {
+    GST_INFO_OBJECT (this, "Setting format");
+    switch (this->output_format) {
+      case OMX_AUDIO_AACStreamFormatRAW:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "raw");
+        break;
+      case OMX_AUDIO_AACStreamFormatMP2ADTS:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "adts");
+        break;
+      case OMX_AUDIO_AACStreamFormatMP4ADTS:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "adts");
+        break;
+      case OMX_AUDIO_AACStreamFormatMP4LOAS:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "loas");
+        break;
+      case OMX_AUDIO_AACStreamFormatMP4LATM:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "latm");
+        break;
+      case OMX_AUDIO_AACStreamFormatADIF:
+        gst_structure_fixate_field_string (srcstructure, "stream-format",
+            "adif");
+        break;
+      default:
+        GST_INFO_OBJECT (this, "Invalid format");
+        break;
     }
   }
-  
-  if(this->output_format == OMX_AUDIO_AACStreamFormatADIF)
-    {
-      GstBuffer *codec_data;
-      codec_data = gst_omx_aac_enc_generate_codec_data(base);
-      gst_caps_set_simple (newcaps, "codec_data",
-			   GST_TYPE_BUFFER, codec_data, (char *)NULL);
-       gst_buffer_unref (codec_data);
-    }
-  
+
+  if (this->output_format == OMX_AUDIO_AACStreamFormatADIF) {
+    GstBuffer *codec_data;
+    codec_data = gst_omx_aac_enc_generate_codec_data (base);
+    gst_caps_set_simple (newcaps, "codec_data",
+        GST_TYPE_BUFFER, codec_data, (char *) NULL);
+    gst_buffer_unref (codec_data);
+  }
+
   gst_structure_get_int (srcstructure, "rate", &this->format.rate);
   gst_structure_get_int (srcstructure, "channels", &this->format.channels);
   gst_structure_get_int (srcstructure, "mpegversion", &this->profile);
@@ -399,27 +404,29 @@ nosetcaps:
 }
 
 
-static GstBuffer *gst_omx_aac_enc_generate_codec_data (GstOmxBase *base){
-    GstBuffer *codec_data = NULL;
-    guchar *data;
-    guint sr_idx;
-    GstOmxAACEnc *this;
+static GstBuffer *
+gst_omx_aac_enc_generate_codec_data (GstOmxBase * base)
+{
+  GstBuffer *codec_data = NULL;
+  guchar *data;
+  guint sr_idx;
+  GstOmxAACEnc *this;
 
-    this = GST_OMX_AAC_ENC (base);
-    /*
-     * Now create the codec data header, it goes like
-     * 5 bit: profile
-     * 4 bit: sample rate index
-     * 4 bit: number of channels
-     * 3 bit: unused
-     */
-    sr_idx = gst_omx_aac_enc_get_rateIdx(this->rate);
-    codec_data = gst_buffer_new_and_alloc(2);
-    data = GST_BUFFER_DATA(codec_data);
-    data[0] = ((this->profile & 0x1F) << 3) | ((sr_idx & 0xE) >> 1);
-    data[1] = ((sr_idx & 0x1) << 7) | ((this->channels & 0xF) << 3);
+  this = GST_OMX_AAC_ENC (base);
+  /*
+   * Now create the codec data header, it goes like
+   * 5 bit: profile
+   * 4 bit: sample rate index
+   * 4 bit: number of channels
+   * 3 bit: unused
+   */
+  sr_idx = gst_omx_aac_enc_get_rateIdx (this->rate);
+  codec_data = gst_buffer_new_and_alloc (2);
+  data = GST_BUFFER_DATA (codec_data);
+  data[0] = ((this->profile & 0x1F) << 3) | ((sr_idx & 0xE) >> 1);
+  data[1] = ((sr_idx & 0x1) << 7) | ((this->channels & 0xF) << 3);
 
-    return codec_data;
+  return codec_data;
 }
 
 
