@@ -59,7 +59,8 @@ enum
   PROP_CAPT_MODE,
   PROP_VIP_MODE,
   PROP_SCAN_TYPE,
-  PROP_SKIP_FRAMES
+  PROP_SKIP_FRAMES,
+  PROP_FIELD_MERGED
 };
 
 #define PADX 32
@@ -88,6 +89,7 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
 #define PROP_VIP_MODE_DEFAULT             OMX_VIDEO_CaptureVifMode_16BIT
 #define PROP_SCAN_TYPE_DEFAULT            OMX_VIDEO_CaptureScanTypeProgressive
 #define PROP_SKIP_FRAMES_DEFAULT          0
+#define PROP_FIELD_MERGED_DEFAULT          0
 
 
 /* Properties enumerates */
@@ -222,6 +224,12 @@ gst_omx_camera_class_init (GstOmxCameraClass * klass)
           "Skip this amount of frames after a vaild frame",
           0, 30, PROP_SKIP_FRAMES_DEFAULT, G_PARAM_READWRITE));
 
+  g_object_class_install_property (gobject_class, PROP_FIELD_MERGED,
+      g_param_spec_boolean ("field-merged", "Field Merge",
+          "Allow interlaced video fields to be merged in a single progressive frame",
+          PROP_FIELD_MERGED_DEFAULT, G_PARAM_READWRITE));
+
+
   gst_element_class_set_details_simple (element_class,
       "OpenMAX Video Source",
       "Source/Video",
@@ -294,6 +302,7 @@ gst_omx_camera_init (GstOmxCamera * this)
   this->vip_mode = PROP_VIP_MODE_DEFAULT;
   this->scan_type = PROP_SCAN_TYPE_DEFAULT;
   this->skip_frames = PROP_SKIP_FRAMES_DEFAULT;
+  this->field_merged = PROP_FIELD_MERGED_DEFAULT;
 }
 
 
@@ -340,6 +349,10 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   if (!gst_structure_get_boolean (structure, "interlaced", &base->interlaced))
     base->interlaced = FALSE;
+
+  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced) {
+    base->interlaced = TRUE;
+  }
 
   if (base->interlaced) {
     this->format.size_padded =
@@ -479,6 +492,10 @@ gst_omx_camera_set_property (GObject * object,
       this->skip_frames = g_value_get_uint (value);
       GST_INFO_OBJECT (this, "Setting skip-frames to %d", this->skip_frames);
       break;
+    case PROP_FIELD_MERGED:
+      this->field_merged = g_value_get_boolean (value);
+      GST_INFO_OBJECT (this, "Setting field-merged to %d", this->field_merged);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -508,9 +525,11 @@ gst_omx_camera_get_property (GObject * object,
       g_value_set_enum (value, this->scan_type);
       break;
     case PROP_SKIP_FRAMES:
-    {
+      g_value_set_uint (value, this->skip_frames);
       break;
-    }
+    case PROP_FIELD_MERGED:
+      g_value_set_boolean (value, this->field_merged);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -555,9 +574,10 @@ gst_omx_camera_init_pads (GstOmxBaseSrc * base)
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height_padded;
 
-  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced)
-    port->format.video.nFrameHeight = port->format.video.nFrameHeight / 2;
-
+  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced) {
+    if (!this->field_merged)
+      port->format.video.nFrameHeight = port->format.video.nFrameHeight / 2;
+  }
   port->format.video.nStride = this->format.width_padded;
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
   port->format.video.eColorFormat =
@@ -616,9 +636,13 @@ gst_omx_camera_init_pads (GstOmxBaseSrc * base)
   hw_port_param.nMaxHeight = this->format.height_padded;
   hw_port_param.nMaxWidth = this->format.width;
   hw_port_param.nMaxChnlsPerHwPort = 1;
-  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced)
-    hw_port_param.nMaxHeight = hw_port_param.nMaxHeight >> 1;
-
+  if (this->scan_type == OMX_VIDEO_CaptureScanTypeInterlaced) {
+    if (this->field_merged) {
+      hw_port_param.bFieldMerged = 1;
+    } else {
+      hw_port_param.nMaxHeight = hw_port_param.nMaxHeight >> 1;
+    }
+  }
 
   GST_DEBUG_OBJECT (this,
       "Hw port properties: capture mode %d, vif mode %d, max height %li, max width %li, max channel %li, scan type %d, format %d",
@@ -763,7 +787,7 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
   if (!caps)
     goto nocaps;
 
-  /*FIXME: Set the interlaced flag correctly*/
+  /*FIXME: Set the interlaced flag correctly */
 /*    i = (0 != (omx_buf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
   if (i != this->format.interlaced) {
     this->format.interlaced = i;
@@ -775,7 +799,7 @@ gst_omx_camera_create (GstOmxBaseSrc * base, OMX_BUFFERHEADERTYPE * omx_buf,
     }
     gst_pad_set_caps (this->srcpad, caps);
   }
-  */GST_BUFFER_SIZE (*buffer) = this->format.size_padded;
+  */ GST_BUFFER_SIZE (*buffer) = this->format.size_padded;
   GST_BUFFER_CAPS (*buffer) = caps;
   GST_BUFFER_DATA (*buffer) = omx_buf->pBuffer;
   GST_BUFFER_MALLOCDATA (*buffer) = (guint8 *) omx_buf;

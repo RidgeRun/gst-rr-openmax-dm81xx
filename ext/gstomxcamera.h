@@ -54,6 +54,7 @@ struct _GstOmxCamera
   gint vip_mode;
   gint scan_type;
   guint skip_frames;
+  gboolean field_merged;
 };
 
 
