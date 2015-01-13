@@ -252,6 +252,7 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
     GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
     init.nPorts = 2;
     init.nStartPortNumber = 0;
+    this->audio_component = TRUE;
     g_mutex_lock (&_omx_mutex);
     error = OMX_SetParameter (this->handle, OMX_IndexParamAudioInit, &init);
     g_mutex_unlock (&_omx_mutex);
@@ -322,6 +323,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   this->requested_size = 0;
+  this->audio_component = FALSE;
   this->peer_alloc = FALSE;
   this->flushing = FALSE;
   this->started = FALSE;
@@ -846,7 +848,6 @@ static OMX_ERRORTYPE
 gst_omx_base_stop (GstOmxBase * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
-  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
 
   if (!this->started)
     goto alreadystopped;
@@ -855,8 +856,8 @@ gst_omx_base_stop (GstOmxBase * this)
     GST_OBJECT_LOCK (this);
     this->flushing = TRUE;
     GST_OBJECT_UNLOCK (this);
-    /* TODO: DSP does not support flush ports */
-    if (!strstr (klass->handle_name, "DSP")) {
+    /* DSP does not support flush ports */
+    if (!(this->audio_component)) {
       GST_INFO_OBJECT (this, "Flushing ports");
       error =
           gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
@@ -943,16 +944,31 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
   GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
   GstOmxBase *this = GST_OMX_BASE (element);
 
+  switch (transition) {
+    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+      /*Start processing buffers for DSP components */
+      if (this->audio_component) {
+        GST_OBJECT_LOCK (this);
+        this->flushing = FALSE;
+        GST_OBJECT_UNLOCK (this);
+      }
+      break;
+    default:
+      break;
+  }
+
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
   if (ret == GST_STATE_CHANGE_FAILURE)
     return ret;
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-      /*Dont try to push any more buffers */
-      GST_OBJECT_LOCK (this);
-      this->flushing = TRUE;
-      GST_OBJECT_UNLOCK (this);
+      /*Dont try to push any more buffers for DSP components */
+      if (this->audio_component) {
+        GST_OBJECT_LOCK (this);
+        this->flushing = TRUE;
+        GST_OBJECT_UNLOCK (this);
+      }
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_omx_base_stop (this);
@@ -1808,7 +1824,6 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 {
 
   GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
-  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (G_UNLIKELY (this == NULL)) {
@@ -1827,8 +1842,8 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
       GST_OBJECT_LOCK (this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
-      /* TODO: DSP does not support flush ports */
-      if (!strstr (klass->handle_name, "DSP")) {
+      /*  DSP does not support flush ports */
+      if (!(this->audio_component)) {
         error =
             gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
             GST_PAD_UNKNOWN, NULL);
