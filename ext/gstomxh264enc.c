@@ -543,6 +543,7 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
 
   param.eProfile = this->profile;
   param.eLevel = this->level;
+  g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetParameter (GST_OMX_BASE (this)->handle,
       OMX_IndexParamVideoProfileLevelCurrent, &param);

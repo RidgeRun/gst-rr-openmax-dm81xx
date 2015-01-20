@@ -161,7 +161,7 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
 
   this->requested_size = 0;
   this->offset = 0;
-  this->peer_alloc = TRUE;
+  this->peer_alloc = FALSE;
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
