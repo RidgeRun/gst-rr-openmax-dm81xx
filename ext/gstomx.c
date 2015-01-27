@@ -31,6 +31,7 @@
 #include "gstomxmpeg2dec.h"
 #include "gstomxh264dec.h"
 #include "gstomxh264enc.h"
+#include "gstomxjpegenc.h"
 #include "gstomxaacenc.h"
 #include "gstomxaacdec.h"
 #include "gstomxscaler.h"
@@ -81,6 +82,10 @@ omx_init (GstPlugin * omx)
 
   if (!gst_element_register (omx, "omx_h264enc", GST_RANK_NONE,
           GST_TYPE_OMX_H264_ENC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_jpegenc", GST_RANK_NONE,
+          GST_TYPE_OMX_JPEG_ENC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_aacenc", GST_RANK_NONE,

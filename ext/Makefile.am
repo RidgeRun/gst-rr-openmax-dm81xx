@@ -9,6 +9,7 @@ libgstrromx_la_SOURCES = \
 	gstomxmpeg2dec.c gstomxmpeg2dec.h \
 	gstomxh264dec.c gstomxh264dec.h \
 	gstomxh264enc.c gstomxh264enc.h \
+	gstomxjpegenc.c gstomxjpegenc.h \
 	gstomxscaler.c gstomxscaler.h \
 	gstomxbuftab.c gstomxbuftab.h \
 	gstomxbufqueue.c gstomxbufqueue.h \
@@ -35,6 +36,7 @@ noinst_HEADERS = \
 	gstomxmpeg2dec.h \
 	gstomxh264dec.h \
 	gstomxh264enc.h \
+	gstomxjpegenc.h \
 	gstomxscaler.h \
 	gstomxbuftab.h \
 	gstomxbufqueue.h \
