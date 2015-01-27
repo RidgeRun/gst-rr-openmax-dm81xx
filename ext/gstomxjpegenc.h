@@ -50,18 +50,6 @@ struct _GstOmxJpegEnc
 
   /* Properties */
 
-/*  guint framerate;
-  guint bitrate;
-  OMX_VIDEO_AVCPROFILETYPE profile;
-  OMX_VIDEO_AVCLEVELTYPE level;
-  gboolean bytestream;
-  guint i_period;
-  guint force_idr_period;
-  gboolean force_idr;
-  OMX_VIDEO_ENCODING_MODE_PRESETTYPE encodingPreset;
-  OMX_VIDEO_RATECONTROL_PRESETTYPE rateControlPreset;
-  gint cont; */
-
   gboolean is_interlaced;
   gint quality;
 };
