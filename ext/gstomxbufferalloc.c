@@ -65,7 +65,6 @@
 #include <string.h>
 
 #include "gstomxbufferalloc.h"
-#include "gstomxbuffertransport.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_omxbufferalloc_debug);
 #define GST_CAT_DEFAULT gst_omxbufferalloc_debug
