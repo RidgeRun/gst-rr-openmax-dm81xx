@@ -318,6 +318,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   GstCaps *newcaps = NULL;
   GValue stride = { 0, };
   GValue interlaced = { 0, };
+  guint32 fourcc;
 
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
@@ -343,10 +344,20 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
     goto invalidcaps;
   }
 
-  /* This is fixed for testing with NV12 */
-  this->format.format = GST_VIDEO_FORMAT_NV12;
-  /* The right value is set with interlaced flag on output omx buffers */
+  GST_DEBUG_OBJECT (this, "Reading format");
+  if (gst_structure_has_name (structure, "video/x-raw-yuv")) {
+    gst_structure_get_fourcc (structure, "format", &fourcc);
 
+    this->format.format = gst_video_format_from_fourcc (fourcc);
+    if (this->format.format == GST_VIDEO_FORMAT_UNKNOWN) {
+      goto invalidcaps;
+    }
+  } else {
+    this->format.format = GST_VIDEO_FORMAT_UNKNOWN;
+    goto invalidcaps;
+  }
+
+  /* The right value is set with interlaced flag on output omx buffers */
   if (!gst_structure_get_boolean (structure, "interlaced", &base->interlaced))
     base->interlaced = FALSE;
 
@@ -355,23 +366,27 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   }
 
   if (base->interlaced) {
-    this->format.size_padded =
-        this->format.width_padded * (this->format.height_padded / 2) * 1.5;
+    this->format.size_padded = gst_video_format_get_size (this->format.format,
+							  this->format.width_padded,
+							  (this->format.height_padded / 2));
     this->format.size =
         gst_video_format_get_size (this->format.format, this->format.width,
         this->format.height / 2);
   } else {
     this->format.size_padded =
-        this->format.width_padded * this->format.height_padded * 1.5;
+      gst_video_format_get_size (this->format.format,
+        this->format.width_padded, this->format.height_padded);
     this->format.size = gst_video_format_get_size (this->format.format,
         this->format.width, this->format.height);
   }
+
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
-      "\tFormat NV12\n"
+      "\tFormat  %"GST_FOURCC_FORMAT "\n"
       "\tFramerate: %u/%u",
       this->format.width,
       this->format.height,
+      GST_FOURCC_ARGS (fourcc),
       this->format.framerate_num, this->format.framerate_den);
 
   /* Ask for the output caps, if not fixed then try the biggest frame */
@@ -391,7 +406,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   gst_structure_fixate_field_nearest_int (srcstructure, "height",
       this->format.height);
   gst_structure_set (srcstructure, "format", GST_TYPE_FOURCC,
-      gst_video_format_to_fourcc (this->format.format), NULL);
+      gst_video_format_to_fourcc (this->format.format), (char*) NULL);
 
   gst_structure_get_int (srcstructure, "width", &this->format.width);
   gst_structure_get_int (srcstructure, "height", &this->format.height);
@@ -456,7 +471,7 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
       g_return_if_fail (G_VALUE_TYPE (v) == GST_TYPE_LIST);
 
       fourcc = gst_value_get_fourcc (gst_value_list_get_value (v, 0));
-      gst_structure_set (structure, "format", GST_TYPE_FOURCC, fourcc, NULL);
+      gst_structure_set (structure, "format", GST_TYPE_FOURCC, fourcc, (char*)NULL);
     }
   }
 
@@ -712,7 +727,7 @@ gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
 
   switch (format) {
     case GST_VIDEO_FORMAT_YUY2:
-      buffer_size = stride * height;
+      buffer_size = stride * height * 2;
       break;
     case GST_VIDEO_FORMAT_I420:
       buffer_size = stride * height + 2 * ((stride >> 1) * ((height + 1) >> 2));
