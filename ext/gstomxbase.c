@@ -62,10 +62,12 @@ enum
   PROP_PEER_ALLOC,
   PROP_NUM_INPUT_BUFFERS,
   PROP_NUM_OUTPUT_BUFFERS,
+  PROP_NUM_BUFFERS
 };
 
 #define GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT    8
 #define GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT   8
+#define GST_OMX_BASE_NUM_BUFFERS_DEFAULT   		  0
 
 #define gst_omx_base_parent_class parent_class
 static GstElementClass *parent_class = NULL;
@@ -200,6 +202,11 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
       g_param_spec_uint ("output-buffers", "Output buffers",
           "OMX output buffers number",
           1, 16, GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_NUM_BUFFERS,
+      g_param_spec_int ("num-buffers", "Number of buffers",
+          "The number of Buffers to be processed (0 : process all buffers)",
+          0, G_MAXINT, GST_OMX_BASE_NUM_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 }
 
 static OMX_ERRORTYPE
@@ -252,7 +259,6 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
     GST_OMX_INIT_STRUCT (&init, OMX_PORT_PARAM_TYPE);
     init.nPorts = 2;
     init.nStartPortNumber = 0;
-    this->audio_component = TRUE;
     g_mutex_lock (&_omx_mutex);
     error = OMX_SetParameter (this->handle, OMX_IndexParamAudioInit, &init);
     g_mutex_unlock (&_omx_mutex);
@@ -323,7 +329,6 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   this->requested_size = 0;
-  this->audio_component = FALSE;
   this->peer_alloc = FALSE;
   this->flushing = FALSE;
   this->started = FALSE;
@@ -338,6 +343,11 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
+
+  this->num_buffers = 0;
+  this->cont = 0;
+  this->num_buffers_mutex = g_mutex_new();
+  this->num_buffers_cond  = g_cond_new();
 
   error = gst_omx_base_allocate_omx (this, klass->handle_name);
   if (GST_OMX_FAIL (error)) {
@@ -367,6 +377,11 @@ gst_omx_base_set_property (GObject * object, guint prop_id,
       GST_INFO_OBJECT (this, "Setting output-buffers to %d",
           this->output_buffers);
       break;
+    case PROP_NUM_BUFFERS:
+      this->num_buffers = g_value_get_int (value);
+      GST_INFO_OBJECT (this, "Setting num-buffers to %d",
+          this->num_buffers);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -388,6 +403,9 @@ gst_omx_base_get_property (GObject * object, guint prop_id,
       break;
     case PROP_NUM_OUTPUT_BUFFERS:
       g_value_set_uint (value, this->output_buffers);
+      break;
+    case PROP_NUM_BUFFERS:
+      g_value_set_int (value, this->num_buffers);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -848,6 +866,7 @@ static OMX_ERRORTYPE
 gst_omx_base_stop (GstOmxBase * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
 
   if (!this->started)
     goto alreadystopped;
@@ -856,8 +875,8 @@ gst_omx_base_stop (GstOmxBase * this)
     GST_OBJECT_LOCK (this);
     this->flushing = TRUE;
     GST_OBJECT_UNLOCK (this);
-    /* DSP does not support flush ports */
-    if (!(this->audio_component)) {
+    /* TODO: DSP does not support flush ports */
+    if (!strstr (klass->handle_name, "DSP")) {
       GST_INFO_OBJECT (this, "Flushing ports");
       error =
           gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
@@ -944,31 +963,16 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
   GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
   GstOmxBase *this = GST_OMX_BASE (element);
 
-  switch (transition) {
-    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-      /*Start processing buffers for DSP components */
-      if (this->audio_component) {
-        GST_OBJECT_LOCK (this);
-        this->flushing = FALSE;
-        GST_OBJECT_UNLOCK (this);
-      }
-      break;
-    default:
-      break;
-  }
-
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
   if (ret == GST_STATE_CHANGE_FAILURE)
     return ret;
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-      /*Dont try to push any more buffers for DSP components */
-      if (this->audio_component) {
-        GST_OBJECT_LOCK (this);
-        this->flushing = TRUE;
-        GST_OBJECT_UNLOCK (this);
-      }
+      /*Dont try to push any more buffers */
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_omx_base_stop (this);
@@ -1257,8 +1261,8 @@ gst_omx_base_free_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
     node = (GstOmxBufTabNode *) buffers->data;
     buffer = node->buffer;
 
-    GST_DEBUG_OBJECT (this, "Freeing %s:%s buffer number %u: %p",
-        GST_DEBUG_PAD_NAME (pad), i, buffer);
+    GST_DEBUG_OBJECT (this, "Freeing %s:%s buffer number %u:%u %p",
+        GST_DEBUG_PAD_NAME (pad), i, pad->port->nBufferCountActual, buffer);
 
     error = gst_omx_buf_tab_remove_buffer (pad->buffers, buffer);
     if (GST_OMX_FAIL (error))
@@ -1516,8 +1520,8 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   OMX_ERRORTYPE error = OMX_ErrorNone;
   gboolean flushing;
 
-  GST_LOG_OBJECT (this, "Fill buffer callback for buffer %p->%p", outbuf,
-      outbuf->pBuffer);
+  GST_INFO_OBJECT (this, "Fill buffer callback for buffer %u %p->%p",
+  bufdata->id, outbuf, outbuf->pBuffer);
 
   GST_OBJECT_LOCK (this);
   flushing = this->flushing;
@@ -1547,6 +1551,19 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
     if (this->fill_ret != GST_FLOW_OK) {
       goto cbfailed;
     }
+  }
+
+  /* In some cases the EoS event arrives before we encode the
+  *  desired amount of frames using the num_buffers property we
+  *  can be sure that we will encode this amount of frames (i.e.snapshots)
+  */
+
+  if(this->num_buffers) {
+	this->cont++;
+	if(this->cont >= this->num_buffers) {
+	    g_cond_signal(this->num_buffers_cond);
+	    this->cont = 0;
+	}
   }
 
   return error;
@@ -1824,6 +1841,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 {
 
   GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (G_UNLIKELY (this == NULL)) {
@@ -1838,12 +1856,23 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
        * try to process any more buffers. */
     case GST_EVENT_EOS:
     {
+	  /* In some cases the EoS event arrives before we encode the
+	  * desired amount of frames using the num_buffers property we
+      *  can be sure that we will encode this amount of frames (i.e.snapshots)
+      */
+
+	  if(this->num_buffers){
+	    g_mutex_lock(this->num_buffers_mutex);
+	    g_cond_wait(this->num_buffers_cond,this->num_buffers_mutex);
+	    g_mutex_unlock(this->num_buffers_mutex);
+	  }
+		
       GST_INFO_OBJECT (this, "EOS received, flushing ports");
       GST_OBJECT_LOCK (this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
-      /*  DSP does not support flush ports */
-      if (!(this->audio_component)) {
+      /* TODO: DSP does not support flush ports */
+      if (!strstr (klass->handle_name, "DSP")) {
         error =
             gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
             GST_PAD_UNKNOWN, NULL);

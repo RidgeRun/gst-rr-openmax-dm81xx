@@ -57,12 +57,16 @@ struct _GstOmxBase
   guint input_buffers;
   guint output_buffers;
 
+  guint num_buffers;
+  guint cont;
+  GCond *num_buffers_cond;
+  GMutex *num_buffers_mutex;
+
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
   gboolean first_buffer;
   gboolean interlaced;
-  gboolean audio_component;
 
   OMX_STATETYPE state;
   GMutex waitmutex;
