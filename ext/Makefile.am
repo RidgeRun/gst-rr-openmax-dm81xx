@@ -19,7 +19,8 @@ libgstrromx_la_SOURCES = \
 	gstomxcamera.c gstomxcamera.h \
 	gstomxaacenc.c gstomxaacenc.h \
 	gstomxaacdec.c gstomxaacdec.h \
-	gstomxrrparser.c gstomxrrparser.h
+	gstomxrrparser.c gstomxrrparser.h \
+	gstomxnoisefilter.c gstomxnoisefilter.h
 
 # compiler and linker flags used to compile this rromx, set in configure.ac
 libgstrromx_la_CFLAGS = $(GST_CFLAGS) $(OMX_CFLAGS)
@@ -46,4 +47,5 @@ noinst_HEADERS = \
 	gstomxcamera.h \
 	gstomxaacenc.h \
 	gstomxaacdec.h \
-	gstomxrrparser.h
+	gstomxrrparser.h \
+	gstomxnoisefilter.h

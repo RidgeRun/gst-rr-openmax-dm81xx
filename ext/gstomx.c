@@ -38,6 +38,7 @@
 #include "gstomxdeiscaler.h"
 #include "gstomxcamera.h"
 #include "gstomxrrparser.h"
+#include "gstomxnoisefilter.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -112,6 +113,10 @@ omx_init (GstPlugin * omx)
     return FALSE;
   if (!gst_element_register (omx, "rr_h264parser", GST_RANK_NONE,
           GST_TYPE_RRPARSER))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_noisefilter", GST_RANK_NONE,
+			     GST_TYPE_OMX_NOISE_FILTER))
     return FALSE;
 
   return TRUE;
