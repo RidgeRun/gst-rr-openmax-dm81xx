@@ -3,7 +3,7 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2014 Eugenia Guzman <eugenia.guzman@ridgerun.com>>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -52,7 +52,7 @@
 
 #include <xdc/std.h>
 #include <ti/syslink/utils/IHeap.h>
-#include <ti/ipc/SharedRegion.h>
+//#include <ti/ipc/SharedRegion.h>
 
 
 
@@ -68,8 +68,8 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMXBUFFERALLOC))
 #define GST_IS_OMXBUFFERALLOC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMXBUFFERALLOC))
-  
-  
+
+
 typedef struct GOmxPort GOmxPort;
 
 typedef struct {
@@ -143,9 +143,9 @@ GOmxImp * g_omx_request_imp (const gchar *name);
 struct _GstOmxBufferAlloc
 {
   GstElement element;
-  
+
   GstPad *sinkpad, *srcpad;
-  
+
   gboolean listfull;
 
   gboolean silent;
@@ -154,13 +154,13 @@ struct _GstOmxBufferAlloc
   GOmxImp *imp;
   guint allocSize;
   guint cnt;
-  
+
   OMX_BUFFERHEADERTYPE **buffers;
   //~ GOmxPort out_port;
   IHeap_Handle heap;
 };
 
-struct _GstOmxBufferAllocClass 
+struct _GstOmxBufferAllocClass
 {
   GstElementClass parent_class;
 };
