@@ -109,6 +109,8 @@ static void gst_omx_buffer_alloc_get_property (GObject * object, guint prop_id,
 
 static gboolean gst_omx_buffer_alloc_set_caps (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_omx_buffer_alloc_chain (GstPad * pad, GstBuffer * buf);
+static OMX_ERRORTYPE gst_omx_buffer_alloc_free_buffers (GstOmxBufferAlloc * this,
+														GstOmxPad * pad);
 
 GstFlowReturn gst_omx_buffer_alloc_allocate_buffer (GstPad *pad, guint64 offset, guint size,
                                       GstCaps *caps, GstBuffer **buf);
@@ -299,25 +301,7 @@ GstBuffer* gst_omx_buffer_alloc_clone (GstPad * pad, GstBuffer *parent)
 	buffer = gst_buffer_make_metadata_writable(parent);
 	GST_BUFFER_FLAGS(buffer) |= GST_OMX_BUFFER_FLAG;
 	omxdata->buffer = buffer;
-		
-	//~ if (GST_OMX_IS_OMX_BUFFER (parent)) {
-		
-		//GST_BUFFER_FREE_FUNC (buffer) = gst_omxbufferalloc_release_buffer;
-		/*if(this->current_buf < this->num_buffers){
-			omxdata.id = this->current_buf;
-			this->current_buf++;
-			omxpeerbuf.pBuffer = GST_BUFFER_DATA(parent);
-			omxpeerbuf.pAppPrivate = &omxdata;
-			//~ printf ("Buffer %p\n", omxpeerbuf.pBuffer);
-			error = gst_omx_buf_tab_find_buffer (omxpad->buffers, &omxpeerbuf, &omxbuf, &busy);
-			g_print("### FIND BUFFER OK\n");
-			//if (GST_OMX_FAIL (error))
-			//	goto notfound;
-			GST_BUFFER_MALLOCDATA(buffer) = omxbuf;
-			GST_BUFFER_DATA(buffer) = omxbuf->pBuffer;
-			//GST_BUFFER_FREE_FUNC (buffer) = gst_omx_bufferalloc_release_buffer;
-		}*/
-	//~ }
+
 	return buffer;
 }
 
@@ -356,7 +340,7 @@ void gst_omx_buffer_alloc_allocate_buffers (GstOmxBufferAlloc *this, GstOmxPad *
 	  bufdata->pad = pad;
 	  bufdata->buffer = NULL;
 	  bufdata->id = i;
-	 this->buffers[i] = malloc(sizeof(OMX_BUFFERHEADERTYPE));
+	 this->buffers[i] = g_malloc(sizeof(OMX_BUFFERHEADERTYPE));
 	 this->buffers[i]->pBuffer = Memory_alloc (this->heap, size, 128, NULL);
   	 this->buffers[i]->nAllocLen = size;
   	 this->buffers[i]->pAppPrivate = bufdata;
@@ -454,113 +438,62 @@ nofreebuf:
   }
 }
 
-void
-g_omx_release_imp (GOmxImp *imp)
+static OMX_ERRORTYPE
+gst_omx_buffer_alloc_free_buffers (GstOmxBufferAlloc * this, GstOmxPad * pad)
 {
-    g_mutex_lock (imp->mutex);
-    imp->client_count--;
-    if (imp->client_count == 0)
-    {
-        #ifdef USE_STATIC
-        OMX_Deinit();
-        #else
-        imp->sym_table.deinit ();
-        #endif
-    }
-    g_mutex_unlock (imp->mutex);
-}
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *buffer;
+  GstOmxBufTabNode *node;
+  guint i;
+  GList *buffers;
 
-static GOmxImp *
-imp_new (const gchar *name)
-{
-    GOmxImp *imp;
+  buffers = pad->buffers->table;
 
-    imp = g_new0 (GOmxImp, 1);
+  /* No buffers allocated yet */
+  if (!buffers)
+    return error;
 
-    #ifdef USE_STATIC
-        imp->mutex = g_mutex_new ();
-    #else
-    /* Load the OpenMAX IL symbols */
-    {
-        void *handle;
+  for (i = 0; i < pad->port->nBufferCountActual; ++i) {
 
-        imp->dl_handle = handle = dlopen (name, RTLD_LAZY);
-        GST_DEBUG ("dlopen(%s) -> %p", name, handle);
-        if (!handle)
-        {
-            g_warning ("%s\n", dlerror ());
-            g_free (imp);
-            return NULL;
-        }
+    if (!buffers)
+      goto shortread;
 
-        imp->mutex = g_mutex_new ();
-        imp->sym_table.init = dlsym (handle, "OMX_Init");
-        imp->sym_table.deinit = dlsym (handle, "OMX_Deinit");
-        imp->sym_table.get_handle = dlsym (handle, "OMX_GetHandle");
-        imp->sym_table.free_handle = dlsym (handle, "OMX_FreeHandle");
-    }
-    #endif
+    node = (GstOmxBufTabNode *) buffers->data;
+    buffer = node->buffer;
 
-    return imp;
-}
+    GST_DEBUG_OBJECT (this, "Freeing %s:%s buffer number %u: %p",
+        GST_DEBUG_PAD_NAME (pad), i, buffer);
 
-static void
-imp_free (GOmxImp *imp)
-{
-    if (imp->dl_handle)
-    {
-        dlclose (imp->dl_handle);
-    }
-    g_mutex_free (imp->mutex);
-    g_free (imp);
-}
+    error = gst_omx_buf_tab_remove_buffer (pad->buffers, buffer);
+    if (GST_OMX_FAIL (error))
+      goto notintable;
 
+    /* Resync list */
+    buffers = pad->buffers->table;
 
-GOmxImp *
-g_omx_request_imp (const gchar *name)
-{
-    GOmxImp *imp = NULL;
+    g_free (buffer->pAppPrivate);
 
-    imp_mutex = g_mutex_new ();
-    implementations = g_hash_table_new_full (g_str_hash,
-                                                 g_str_equal,
-                                                 g_free,
-                                                 (GDestroyNotify) imp_free);
-    g_mutex_lock (imp_mutex);
-    imp = g_hash_table_lookup (implementations, name);
+  }
 
-    if (!imp)
-    {
-        imp = imp_new (name);
-        if (imp)
-            g_hash_table_insert (implementations, g_strdup (name), imp);
-    }
+  GST_OBJECT_LOCK (pad);
+  pad->enabled = FALSE;
+  GST_OBJECT_UNLOCK (pad);
 
-    g_mutex_unlock (imp_mutex);
+  return error;
 
-	if (!imp)
-        return NULL;
+shortread:
+  {
+    GST_ERROR_OBJECT (this, "Malformed output buffer list");
+    /*TODO: should I free buffers? */
+    return OMX_ErrorResourcesLost;
+  }
+notintable:
+  {
+    GST_ERROR_OBJECT (this, "The buffer list for %s:%s is malformed: %s",
+        GST_DEBUG_PAD_NAME (GST_PAD (pad)), gst_omx_error_to_str (error));
+    return error;
+  }
 
-	g_mutex_lock (imp->mutex);
-    if (imp->client_count == 0)
-    {
-        OMX_ERRORTYPE omx_error;
-
-        #ifdef USE_STATIC
-        omx_error = OMX_Init ();
-        #else
-        omx_error = imp->sym_table.init ();
-        #endif
-        if (omx_error)
-        {
-            g_mutex_unlock (imp->mutex);
-            return NULL;
-        }
-    }
-    imp->client_count++;
-    g_mutex_unlock (imp->mutex);
-
-	return imp;
 }
 
 static GstStateChangeReturn
@@ -577,7 +510,7 @@ gst_omx_buffer_alloc_change_state (GstElement *element,
     switch (transition)
     {
         case GST_STATE_CHANGE_NULL_TO_READY:
-			this->imp = g_omx_request_imp (this->omx_library);
+			GST_DEBUG_OBJECT (this, "###### Changing state from null to ready");
             break;
 
         default:
@@ -595,14 +528,17 @@ gst_omx_buffer_alloc_change_state (GstElement *element,
 	   be freed on the READY_TO_NULL transition */
 
 	    case GST_STATE_CHANGE_PAUSED_TO_READY:
-			GST_DEBUG_OBJECT (this, "Changing state from paused to ready");
+			GST_DEBUG_OBJECT (this, "###### Changing state from paused to ready");
 			if(this->buffers) {
               for(ii = 0; ii < this->num_buffers; ii++) {
 				  gst_omx_buf_tab_return_buffer (omxpad->buffers, this->buffers[ii]);
 				  Memory_free(this->heap,this->buffers[ii]->pBuffer,this->allocSize);
+				  GST_DEBUG_OBJECT (this, "###### Buffer %d already free",ii);
               }
-              g_free(this->buffers);
             }
+            gst_omx_buffer_alloc_free_buffers (this, omxpad);
+            g_free(this->buffers);
+			this->buffers = NULL;
             break;
         case GST_STATE_CHANGE_READY_TO_NULL:
 			GST_DEBUG_OBJECT (this, "Changing state from ready to null");
