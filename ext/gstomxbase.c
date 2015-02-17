@@ -1555,13 +1555,13 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
     goto flushing;
 
   if (this->fill_ret != GST_FLOW_OK)
-    goto drop;
+    goto flushing;
 
   GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
       GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
       GST_STATE_NEXT (this));
   if (GST_STATE_PAUSED > GST_STATE (this))
-    goto flushing;
+    goto closing;
 
   gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
 
@@ -1597,24 +1597,21 @@ illegal:
     return error;
   }
 
-flushing:
+closing:
   {
-    GST_DEBUG_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
+    GST_INFO_OBJECT (this, "Discarding buffer %d while closing", bufdata->id);
     return error;
   }
 
 cbfailed:
   {
-    GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
-        ("Subclass failed to process buffer (id:%d): %s",
-            bufdata->id, gst_flow_get_name (this->fill_ret)), (NULL));
-
+    GST_WARNING_OBJECT (this,"Subclass failed to process buffer (id:%d): %s",
+            bufdata->id, gst_flow_get_name (this->fill_ret));
     return error;
   }
 drop:
   {
-    GST_LOG_OBJECT (this, "Dropping buffer, push error %s",
-        gst_flow_get_name (this->fill_ret));
+    GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
     g_mutex_lock (&_omx_mutex);
     error = this->component->FillThisBuffer (this->handle, outbuf);
     g_mutex_unlock (&_omx_mutex);
@@ -1822,9 +1819,6 @@ gst_omx_base_release_buffer (gpointer data)
   error = gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
   if (GST_OMX_FAIL (error))
     goto noreturn;
-
-  if (flushing)
-    goto flushing;
 
   g_mutex_lock (&_omx_mutex);
   error = this->component->FillThisBuffer (this->handle, buffer);
