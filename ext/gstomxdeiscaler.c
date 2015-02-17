@@ -156,11 +156,11 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_release_pad);
 
   gst_element_class_add_pad_template (gstelement_class,
+      gst_static_pad_template_get (&sink_template));
+  gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src0_template));
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src1_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
 
   gobject_class->set_property = gst_omx_deiscaler_set_property;
   gobject_class->get_property = gst_omx_deiscaler_get_property;
