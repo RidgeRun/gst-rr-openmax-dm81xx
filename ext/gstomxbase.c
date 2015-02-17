@@ -492,6 +492,14 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
     if (GST_OMX_FAIL (error))
       goto nofreebuffer;
+
+    GST_OBJECT_LOCK (this);
+    flushing = this->flushing;
+    GST_OBJECT_UNLOCK (this);
+
+    if (this->flushing)
+      goto flushing;
+
     gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
     GST_LOG_OBJECT (this, "Received buffer %p, copying data", omxbuf);
     memcpy (omxbuf->pBuffer, GST_BUFFER_DATA (buf), GST_BUFFER_SIZE (buf));
@@ -925,7 +933,7 @@ gst_omx_base_stop (GstOmxBase * this)
   this->flushing = FALSE;
   this->started = FALSE;
   this->first_buffer = TRUE;
-  this->fill_ret = FALSE;
+  this->fill_ret = GST_FLOW_OK;
   GST_OBJECT_UNLOCK (this);
 
   return error;
@@ -1887,6 +1895,33 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
         if (GST_OMX_FAIL (error))
           goto noflush_eos;
       }
+      break;
+    }
+    case GST_EVENT_FLUSH_START:
+    {
+      if (GST_STATE_PAUSED < GST_STATE (this)) {
+
+	GST_INFO_OBJECT (this, "Flush start received, flushing ports");
+
+	GST_OBJECT_LOCK(this);
+	this->flushing = TRUE;
+	GST_OBJECT_UNLOCK (this);
+	if (!(this->audio_component)) {
+	  error =
+	    gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+				       GST_PAD_UNKNOWN, NULL);
+	}
+      }
+      break;
+    }
+    case GST_EVENT_FLUSH_STOP:
+    {
+      GST_INFO_OBJECT (this, "Flush stop received");
+
+      GST_OBJECT_LOCK(this);
+      this->fill_ret = GST_FLOW_OK;
+      this->flushing = FALSE;
+      GST_OBJECT_UNLOCK (this);
       break;
     }
     default:
