@@ -39,6 +39,7 @@
 #include "gstomxcamera.h"
 #include "gstomxrrparser.h"
 #include "gstomxnoisefilter.h"
+#include "gstomxbufferalloc.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -118,8 +119,12 @@ omx_init (GstPlugin * omx)
   if (!gst_element_register (omx, "omx_noisefilter", GST_RANK_NONE,
 			     GST_TYPE_OMX_NOISE_FILTER))
     return FALSE;
-
-  return TRUE;
+  
+  if (!gst_element_register (omx, "omxbufferalloc", GST_RANK_NONE,
+          GST_TYPE_OMXBUFFERALLOC))
+    return FALSE;
+  
+return TRUE;
 }
 
 /* gstreamer looks for this structure to register omxs
