@@ -1,6 +1,6 @@
 /* 
  * GStreamer
- * Copyright (C) 2014 RidgeRun, LLC (http://www.ridgerun.com)
+ * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,16 +18,30 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OMX_UTILS_H__
-#define __GST_OMX_UTILS_H__
-
-#include <gst/gst.h>
-#include <gst/video/video.h>
+#ifndef __GST_OMX_BUF_QUEUE_H__
+#define __GST_OMX_BUF_QUEUE_H__
 
 #include <OMX_Core.h>
-#include <OMX_IVCommon.h>
+#include <OMX_Component.h>
+#include <OMX_TI_Common.h>
+#include <OMX_TI_Index.h>
 
-G_BEGIN_DECLS
-    OMX_COLOR_FORMATTYPE gst_omx_convert_format_to_omx (GstVideoFormat format);
-G_END_DECLS
-#endif // __GST_OMX_UTILS_H__
+#include <gst/gst.h>
+
+typedef struct _GstOmxBufQueue GstOmxBufQueue;
+
+struct _GstOmxBufQueue
+{
+  GQueue *queue;
+  guint queueused;
+  GMutex queuemutex;
+  GCond queuecond;
+};
+
+GstOmxBufQueue *gst_omx_buf_queue_new ();
+OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
+OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue *);
+OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *,
+    OMX_BUFFERHEADERTYPE *);
+
+#endif /*__GST_OMX_BUF_QUEUE_H__*/

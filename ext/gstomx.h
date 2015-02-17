@@ -35,6 +35,7 @@
 #include "string.h"
 
 #include "gstomxbuftab.h"
+#include "gstomxbufqueue.h"
 #include "gstomxpad.h"
 #include "gstomxerror.h"
 
@@ -50,6 +51,7 @@ typedef OMX_ERRORTYPE (*GstOmxFillBufferDone) (OMX_HANDLETYPE,
 
 struct _GstOmxFormat
 {
+  /*Video */
   gint width;
   gint width_padded;            //aka: stride, pitch
   gint height;
@@ -62,13 +64,17 @@ struct _GstOmxFormat
   guint size;
   guint size_padded;
   gboolean interlaced;
+  /*Audio */
+  gint rate;
+  gint channels;
+
 };
 
 struct _GstOmxBufferData
 {
   GstBuffer *buffer;
   GstOmxPad *pad;
-  guint8 id;
+  guint8 id;                    /*  ID of the buffer used by the buftab  */
 };
 
 #define GST_OMX_INIT_STRUCT(_s_, _name_)	\

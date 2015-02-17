@@ -43,19 +43,18 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_h264_enc_debug);
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV_STRIDED ( "NV12", "[ 0, max ]") ";")
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV_STRIDED ("NV12", "[ 0, max ]") ";")
     );
 
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("video/x-h264,"
-		"width=[16,4096]," "height=[16,4096],"
+        "width=[16,4096]," "height=[16,4096],"
         "framerate=" GST_VIDEO_FPS_RANGE ","
-        "stream-format=(string) byte-stream,"
-        "alignment=(string) au")
+        "stream-format=(string) byte-stream," "alignment=(string) au")
     );
-    
+
 enum
 {
   PROP_0,
@@ -73,7 +72,7 @@ enum
 #define GST_OMX_H264_ENC_BITRATE_DEFAULT	500000
 #define GST_OMX_H264_ENC_BYTESTREAM_DEFAULT	FALSE
 #define GST_OMX_H264_ENC_PROFILE_DEFAULT	OMX_VIDEO_AVCProfileBaseline
-#define GST_OMX_H264_ENC_LEVEL_DEFAULT		OMX_VIDEO_AVCLevel42	
+#define GST_OMX_H264_ENC_LEVEL_DEFAULT		OMX_VIDEO_AVCLevel42
 #define GST_OMX_H264_ENC_IPERIOD_DEFAULT	90
 #define GST_OMX_H264_ENC_IDRPERIOD_DEFAULT	0
 #define GST_OMX_H264_ENC_NEXT_IDR_DEFAULT	FALSE
@@ -84,109 +83,101 @@ enum
 static GType
 gst_omx_h264_enc_profile_get_type ()
 {
-    static GType type = 0;
-	if (!type)
-    {
-		static const GEnumValue vals[] =
-        {
-            {OMX_VIDEO_AVCProfileBaseline,       "Base Profile",          "base"},
-            {OMX_VIDEO_AVCProfileMain,           "Main Profile",          "main"},
-            {OMX_VIDEO_AVCProfileExtended,       "Extended Profile",      "extended"},
-            {OMX_VIDEO_AVCProfileHigh,           "High Profile",          "high"},
-            {OMX_VIDEO_AVCProfileHigh10,         "High 10 Profile",       "high-10"},
-            {OMX_VIDEO_AVCProfileHigh422,        "High 4:2:2 Profile",    "high-422"},
-            {OMX_VIDEO_AVCProfileHigh444,        "High 4:4:4 Profile",    "high-444"},
-            {0, NULL, NULL },
-        };
+  static GType type = 0;
+  if (!type) {
+    static const GEnumValue vals[] = {
+      {OMX_VIDEO_AVCProfileBaseline, "Base Profile", "base"},
+      {OMX_VIDEO_AVCProfileMain, "Main Profile", "main"},
+      {OMX_VIDEO_AVCProfileExtended, "Extended Profile", "extended"},
+      {OMX_VIDEO_AVCProfileHigh, "High Profile", "high"},
+      {OMX_VIDEO_AVCProfileHigh10, "High 10 Profile", "high-10"},
+      {OMX_VIDEO_AVCProfileHigh422, "High 4:2:2 Profile", "high-422"},
+      {OMX_VIDEO_AVCProfileHigh444, "High 4:4:4 Profile", "high-444"},
+      {0, NULL, NULL},
+    };
 
-        type = g_enum_register_static ("RRGstOmxVideoAVCProfile", vals);
-    }
+    type = g_enum_register_static ("RRGstOmxVideoAVCProfile", vals);
+  }
 
-    return type;
+  return type;
 }
 
 #define GST_TYPE_OMX_VIDEO_AVCLEVELTYPE (gst_omx_h264_enc_level_get_type ())
 static GType
 gst_omx_h264_enc_level_get_type ()
 {
-    static GType type = 0;
+  static GType type = 0;
 
-    if (!type)
-    {
-        static const GEnumValue vals[] =
-        {
-            {OMX_VIDEO_AVCLevel1,        "Level 1",         "level-1"},
-            {OMX_VIDEO_AVCLevel1b,       "Level 1b",        "level-1b"},
-            {OMX_VIDEO_AVCLevel11,       "Level 11",        "level-11"},
-            {OMX_VIDEO_AVCLevel12,       "Level 12",        "level-12"},
-            {OMX_VIDEO_AVCLevel13,       "Level 13",        "level-13"},
-            {OMX_VIDEO_AVCLevel2,        "Level 2",         "level-2"},
-            {OMX_VIDEO_AVCLevel21,       "Level 21",        "level-21"},
-            {OMX_VIDEO_AVCLevel22,       "Level 22",        "level-22"},
-            {OMX_VIDEO_AVCLevel3,        "Level 3",         "level-3"},
-            {OMX_VIDEO_AVCLevel31,       "Level 31",        "level-31"},
-            {OMX_VIDEO_AVCLevel32,       "Level 32",        "level-32"},
-            {OMX_VIDEO_AVCLevel4,        "Level 4",         "level-4"},
-            {OMX_VIDEO_AVCLevel41,       "Level 41",        "level-41"},
-            {OMX_VIDEO_AVCLevel42,       "Level 42",        "level-42"},
-            {OMX_VIDEO_AVCLevel5,        "Level 5",         "level-5"},
-            {OMX_VIDEO_AVCLevel51,       "Level 51",        "level-51"},
-            {0, NULL, NULL },
-        };
+  if (!type) {
+    static const GEnumValue vals[] = {
+      {OMX_VIDEO_AVCLevel1, "Level 1", "level-1"},
+      {OMX_VIDEO_AVCLevel1b, "Level 1b", "level-1b"},
+      {OMX_VIDEO_AVCLevel11, "Level 11", "level-11"},
+      {OMX_VIDEO_AVCLevel12, "Level 12", "level-12"},
+      {OMX_VIDEO_AVCLevel13, "Level 13", "level-13"},
+      {OMX_VIDEO_AVCLevel2, "Level 2", "level-2"},
+      {OMX_VIDEO_AVCLevel21, "Level 21", "level-21"},
+      {OMX_VIDEO_AVCLevel22, "Level 22", "level-22"},
+      {OMX_VIDEO_AVCLevel3, "Level 3", "level-3"},
+      {OMX_VIDEO_AVCLevel31, "Level 31", "level-31"},
+      {OMX_VIDEO_AVCLevel32, "Level 32", "level-32"},
+      {OMX_VIDEO_AVCLevel4, "Level 4", "level-4"},
+      {OMX_VIDEO_AVCLevel41, "Level 41", "level-41"},
+      {OMX_VIDEO_AVCLevel42, "Level 42", "level-42"},
+      {OMX_VIDEO_AVCLevel5, "Level 5", "level-5"},
+      {OMX_VIDEO_AVCLevel51, "Level 51", "level-51"},
+      {0, NULL, NULL},
+    };
 
-        type = g_enum_register_static ("RRGstOmxVideoAVCLevel", vals);
-    }
+    type = g_enum_register_static ("RRGstOmxVideoAVCLevel", vals);
+  }
 
-    return type;
+  return type;
 }
 
 #define GST_TYPE_OMX_VIDEO_ENCODE_PRESETTYPE (gst_omx_h264_enc_preset_get_type ())
 static GType
 gst_omx_h264_enc_preset_get_type ()
 {
-    static GType type = 0;
+  static GType type = 0;
 
-    if (!type)
-    {
-        static const GEnumValue vals[] =
-        {
-        	{OMX_Video_Enc_High_Quality,                 "High Quality",         "hq"},
-        	{OMX_Video_Enc_User_Defined,                 "User Defined",         "user"},
-        	{OMX_Video_Enc_High_Speed_Med_Quality,       "High Speed Med Qual",  "hsmq"},
-        	{OMX_Video_Enc_Med_Speed_Med_Quality,        "Med Speed Med Qaul",   "msmq"},
-        	{OMX_Video_Enc_Med_Speed_High_Quality,       "Med Speed High Qaul",  "mshq"},
-        	{OMX_Video_Enc_High_Speed,                   "High Speed",           "hs"},
-            {0, NULL, NULL },
-        };
+  if (!type) {
+    static const GEnumValue vals[] = {
+      {OMX_Video_Enc_High_Quality, "High Quality", "hq"},
+      {OMX_Video_Enc_User_Defined, "User Defined", "user"},
+      {OMX_Video_Enc_High_Speed_Med_Quality, "High Speed Med Qual", "hsmq"},
+      {OMX_Video_Enc_Med_Speed_Med_Quality, "Med Speed Med Qaul", "msmq"},
+      {OMX_Video_Enc_Med_Speed_High_Quality, "Med Speed High Qaul", "mshq"},
+      {OMX_Video_Enc_High_Speed, "High Speed", "hs"},
+      {0, NULL, NULL},
+    };
 
-        type = g_enum_register_static ("RRGstOmxVideoEncoderPreset", vals);
-    }
+    type = g_enum_register_static ("RRGstOmxVideoEncoderPreset", vals);
+  }
 
-    return type;
+  return type;
 }
 
 #define GST_TYPE_OMX_VIDEO_RATECONTROL_PRESETTYPE (gst_omx_h264_enc_rate_ctrl_get_type ())
 static GType
 gst_omx_h264_enc_rate_ctrl_get_type ()
 {
-    static GType type = 0;
+  static GType type = 0;
 
-    if (!type)
-    {
-        static const GEnumValue vals[] =
-        {
-        	{OMX_Video_RC_Low_Delay,    "Low Delay",   "low-delay"},
-        	{OMX_Video_RC_Storage,      "Storage",     "storage"},
-        	{OMX_Video_RC_Twopass,      "Two Pass",    "two-pass"},
-        	{OMX_Video_RC_None,         "none",        "none"},
-            {0, NULL, NULL },
-        };
+  if (!type) {
+    static const GEnumValue vals[] = {
+      {OMX_Video_RC_Low_Delay, "Low Delay", "low-delay"},
+      {OMX_Video_RC_Storage, "Storage", "storage"},
+      {OMX_Video_RC_Twopass, "Two Pass", "two-pass"},
+      {OMX_Video_RC_None, "none", "none"},
+      {0, NULL, NULL},
+    };
 
-        type = g_enum_register_static ("RRGstOmxVideoRateControlPreset", vals);
-    }
+    type = g_enum_register_static ("RRGstOmxVideoRateControlPreset", vals);
+  }
 
-    return type;
-}      
+  return type;
+}
 
 #define gst_omx_h264_enc_parent_class parent_class
 G_DEFINE_TYPE (GstOmxH264Enc, gst_omx_h264_enc, GST_TYPE_OMX_BASE);
@@ -196,13 +187,12 @@ static OMX_ERRORTYPE gst_omx_h264_enc_init_pads (GstOmxBase * this);
 static GstFlowReturn gst_omx_h264_enc_fill_callback (GstOmxBase *,
     OMX_BUFFERHEADERTYPE *);
 
-static OMX_ERRORTYPE gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
+static OMX_ERRORTYPE gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     GstOmxPad *, GstOmxFormat *);
 static void gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_h264_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-static void gst_omx_h264_enc_finalize (GObject * object);
 /* GObject vmethod implementations */
 
 /* initialize the omx's class */
@@ -230,17 +220,15 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
 
   gobject_class->set_property = gst_omx_h264_enc_set_property;
   gobject_class->get_property = gst_omx_h264_enc_get_property;
-  
+
   g_object_class_install_property (gobject_class, PROP_BITRATE,
       g_param_spec_uint ("bitrate", "Encoding bitrate",
           "Sets the encoder bitrate",
-          0, 4294967295, GST_OMX_H264_ENC_BITRATE_DEFAULT,
-          G_PARAM_READWRITE));
+          0, 4294967295, GST_OMX_H264_ENC_BITRATE_DEFAULT, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_BYTESTREAM,
       g_param_spec_boolean ("bytestream", "Bytestream",
           "Sets the encoder bytestream",
-          GST_OMX_H264_ENC_BYTESTREAM_DEFAULT,
-          G_PARAM_READWRITE));
+          GST_OMX_H264_ENC_BYTESTREAM_DEFAULT, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_PROFILE,
       g_param_spec_enum ("profile", "Encoding H264 profile",
           "Sets the H264 profile",
@@ -254,8 +242,7 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
   g_object_class_install_property (gobject_class, PROP_IPERIOD,
       g_param_spec_uint ("i_period", "I frames periodicity",
           "Specifies periodicity of I frames",
-          0, 2147483647, GST_OMX_H264_ENC_IPERIOD_DEFAULT,
-          G_PARAM_READWRITE));
+          0, 2147483647, GST_OMX_H264_ENC_IPERIOD_DEFAULT, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_IDRPERIOD,
       g_param_spec_uint ("force_idr_period", "IDR frames periodicity",
           "Specifies periodicity of IDR frames",
@@ -264,8 +251,7 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
   g_object_class_install_property (gobject_class, PROP_NEXT_IDR,
       g_param_spec_boolean ("force_idr", "Force next frame to be IDR",
           "Force next frame to be IDR",
-          GST_OMX_H264_ENC_NEXT_IDR_DEFAULT,
-          G_PARAM_READWRITE));
+          GST_OMX_H264_ENC_NEXT_IDR_DEFAULT, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_PRESET,
       g_param_spec_enum ("encodingPreset", "Encoding preset",
           "Specifies which encoding preset to use",
@@ -274,9 +260,9 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
   g_object_class_install_property (gobject_class, PROP_RATE_CTRL,
       g_param_spec_enum ("rateControlPreset", "Encoding rate control preset",
           "Specifies what rate control preset to use",
-          GST_TYPE_OMX_VIDEO_RATECONTROL_PRESETTYPE, GST_OMX_H264_ENC_RATE_CTRL_DEFAULT,
-          G_PARAM_READWRITE));
-  
+          GST_TYPE_OMX_VIDEO_RATECONTROL_PRESETTYPE,
+          GST_OMX_H264_ENC_RATE_CTRL_DEFAULT, G_PARAM_READWRITE));
+
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_enc_set_caps);
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_h264_enc_fill_callback);
@@ -307,8 +293,9 @@ gst_omx_h264_enc_init (GstOmxH264Enc * this)
   this->force_idr = GST_OMX_H264_ENC_NEXT_IDR_DEFAULT;
   this->encodingPreset = GST_OMX_H264_ENC_PRESET_DEFAULT;
   this->rateControlPreset = GST_OMX_H264_ENC_RATE_CTRL_DEFAULT;
-  this->cont=0;
-  
+  this->cont = 0;
+  this->is_interlaced = FALSE;
+
   /* Add pads */
   this->sinkpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
@@ -330,32 +317,31 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstOmxH264Enc *this = GST_OMX_H264_ENC (object);
+  GstOmxBase *base = GST_OMX_BASE (this);
+  gboolean reconf = FALSE;
 
   switch (prop_id) {
     case PROP_BITRATE:
       this->bitrate = g_value_get_uint (value);
-      GST_INFO_OBJECT (this, "Setting bitrate to %d",
-          this->bitrate);
+      GST_INFO_OBJECT (this, "Setting bitrate to %d", this->bitrate);
+      reconf = TRUE;
       break;
     case PROP_BYTESTREAM:
       this->bytestream = g_value_get_boolean (value);
-      GST_INFO_OBJECT (this, "Setting bytestream to %d",
-          this->bytestream);
+      GST_INFO_OBJECT (this, "Setting bytestream to %d", this->bytestream);
       break;
     case PROP_PROFILE:
       this->profile = g_value_get_enum (value);
-      GST_INFO_OBJECT (this, "Setting the H264 profile to %d",
-          this->profile);
+      GST_INFO_OBJECT (this, "Setting the H264 profile to %d", this->profile);
       break;
     case PROP_LEVEL:
       this->level = g_value_get_enum (value);
-      GST_INFO_OBJECT (this, "Setting the H264 level to %d",
-          this->level);
+      GST_INFO_OBJECT (this, "Setting the H264 level to %d", this->level);
       break;
     case PROP_IPERIOD:
       this->i_period = g_value_get_uint (value);
-      GST_INFO_OBJECT (this, "Setting I period to %d",
-          this->i_period);
+      GST_INFO_OBJECT (this, "Setting I period to %d", this->i_period);
+      reconf = TRUE;
       break;
     case PROP_IDRPERIOD:
       this->force_idr_period = g_value_get_uint (value);
@@ -380,6 +366,36 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
+  }
+
+  if (reconf) {
+    OMX_VIDEO_CONFIG_DYNAMICPARAMS tDynParams;
+    OMX_ERRORTYPE error_val = OMX_ErrorNone;
+
+    GST_OMX_INIT_STRUCT (&tDynParams, OMX_VIDEO_CONFIG_DYNAMICPARAMS);
+    tDynParams.nPortIndex = 1;
+
+    error_val =
+        OMX_GetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
+        &tDynParams);
+    if (error_val != OMX_ErrorNone) {
+      GST_ERROR_OBJECT (this,
+          "Unable to retrieve dynamic parameters, error: %x", error_val);
+      return;
+    }
+
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        targetBitRate = this->bitrate;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        intraFrameInterval = this->i_period;
+    error_val =
+        OMX_SetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
+        &tDynParams);
+    if (error_val != OMX_ErrorNone) {
+      GST_ERROR_OBJECT (this, "Unable to set dynamic parameters, error: %x",
+          error_val);
+      return;
+    }
   }
 }
 
@@ -423,37 +439,17 @@ gst_omx_h264_enc_get_property (GObject * object, guint prop_id,
   }
 }
 
-static void
-gst_omx_h264_enc_finalize (GObject * object)
-{
-  GstOmxH264Enc *this = GST_OMX_H264_ENC (object);
-
-  if (this->bitrate)
-    g_free (this->bitrate);
-  if (this->bytestream)
-    g_free (this->bytestream);
-  if (this->i_period)
-    g_free (this->i_period);
-  if (this->force_idr_period)
-    g_free (this->force_idr_period);
-  if (this->force_idr)
-    g_free (this->force_idr);
-  
-  /* Chain up to the parent class */
-  G_OBJECT_CLASS (parent_class)->finalize (object);
-}
-
 static gboolean
 gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
 {
   GstOmxH264Enc *this = GST_OMX_H264_ENC (GST_OBJECT_PARENT (pad));
-   GstOmxBase *base = GST_OMX_BASE (this);
+  GstOmxBase *base = GST_OMX_BASE (this);
   const GstStructure *structure = gst_caps_get_structure (caps, 0);
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
   GstCaps *newcaps = NULL;
   GValue stride = { 0, };
-  
+
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
   GST_DEBUG_OBJECT (this, "Reading width");
@@ -461,20 +457,16 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
     this->format.width = -1;
     goto invalidcaps;
   }
-  
-  GST_DEBUG_OBJECT (this, "Reading stride");
-  if (!gst_structure_get_int (structure, "stride",
-          &this->format.width_padded)) {
-    this->format.width_padded = GST_OMX_ALIGN (this->format.width, 16);
-  }
-  
+
   GST_DEBUG_OBJECT (this, "Reading height");
   if (!gst_structure_get_int (structure, "height", &this->format.height)) {
     this->format.height = -1;
     goto invalidcaps;
   }
-  this->format.height_padded = GST_OMX_ALIGN (this->format.height, 16);
-  
+  if (!gst_structure_get_boolean (structure, "interlaced",
+          &this->is_interlaced))
+    this->is_interlaced = FALSE;
+
   GST_DEBUG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
           &this->format.framerate_num, &this->format.framerate_den)) {
@@ -482,14 +474,6 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
     this->format.framerate_den = -1;
     goto invalidcaps;
   }
-  
-  /* This is always fixed */
-  this->format.format = GST_VIDEO_FORMAT_NV12;
-    
-  this->format.size_padded =
-      this->format.width_padded * this->format.height_padded * 1.5;
-  this->format.size = gst_video_format_get_size (this->format.format,
-      this->format.width, this->format.height);
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
@@ -517,10 +501,6 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
   gst_structure_get_int (srcstructure, "height", &this->format.height);
   gst_structure_get_fraction (srcstructure, "framerate",
       &this->format.framerate_num, &this->format.framerate_den);
-
-  g_value_init (&stride, G_TYPE_INT);
-  g_value_set_int (&stride, this->format.width_padded);
-  gst_structure_set_value (srcstructure, "stride", &stride);
 
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
 
@@ -550,7 +530,31 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   OMX_ERRORTYPE error = OMX_ErrorNone;
   gchar *portname = NULL;
   OMX_PARAM_BUFFER_MEMORYTYPE memory;
-  
+  OMX_VIDEO_PARAM_PROFILELEVELTYPE param;
+
+
+
+  GST_OMX_INIT_STRUCT (&param, OMX_VIDEO_PARAM_PROFILELEVELTYPE);
+
+  g_mutex_lock (&_omx_mutex);
+  OMX_GetParameter (base->handle,
+      (OMX_INDEXTYPE) OMX_IndexParamVideoProfileLevelCurrent, &param);
+  g_mutex_unlock (&_omx_mutex);
+
+  param.eProfile = this->profile;
+  param.eLevel = this->level;
+  g_mutex_lock (&_omx_mutex);
+  error =
+      OMX_SetParameter (GST_OMX_BASE (this)->handle,
+      OMX_IndexParamVideoProfileLevelCurrent, &param);
+  g_mutex_unlock (&_omx_mutex);
+
+  if (error == OMX_ErrorUnsupportedIndex) {
+    GST_WARNING_OBJECT (this,
+        "Setting profile/level not supported by component");
+  }
+  /* TODO: Set here the notification type */
+
   GST_DEBUG_OBJECT (this, "Initializing sink pad memory");
   GST_OMX_INIT_STRUCT (&memory, OMX_PARAM_BUFFER_MEMORYTYPE);
   memory.nPortIndex = 0;
@@ -576,24 +580,28 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
     portname = "output";
     goto noport;
   }
-  
-    
+
+
   GST_DEBUG_OBJECT (this, "Initializing sink pad port");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->sinkpad));
 
-  port->nPortIndex = 0;  // OMX_VIDENC_INPUT_PORT
+  port->nPortIndex = 0;         // OMX_VIDENC_INPUT_PORT
   port->eDir = OMX_DirInput;
-  
+
   port->nBufferCountActual = base->input_buffers;
-  port->nBufferSize = this->format.size;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
+  if (this->is_interlaced) {
+    port->format.video.nFrameHeight = this->format.height * 0.5;
+  }
   port->format.video.nStride = this->format.width;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
       this->format.framerate_den) << 16;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
-  
+  port->nBufferSize =           //this->format.size;
+      (port->format.video.nStride * port->format.video.nFrameHeight) * 1.5;
+
   g_mutex_lock (&_omx_mutex);
   error = OMX_SetParameter (GST_OMX_BASE (this)->handle,
       OMX_IndexParamPortDefinition, port);
@@ -608,30 +616,35 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
       port->nPortIndex, port->format.video.nFrameWidth,
       port->format.video.nFrameHeight, port->format.video.nStride,
       port->format.video.eColorFormat, port->nBufferSize);
-      
+
   GST_DEBUG_OBJECT (this, "Initializing src pad port");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->srcpad));
 
-  port->nPortIndex = 1;  // OMX_VIDENC_OUTPUT_PORT
+  port->nPortIndex = 1;         // OMX_VIDENC_OUTPUT_PORT
   port->eDir = OMX_DirOutput;
-  
+
   port->nBufferCountActual = base->output_buffers;
-  port->nBufferSize = this->format.size;
+  port->nBufferSize = this->format.width * this->format.height;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
-  port->format.video.nStride = this->format.width;
+
+  if (this->is_interlaced) {
+    port->format.video.nFrameHeight = this->format.height / 2;
+    port->nBufferSize = this->format.width * this->format.height / 2;
+  }
+  port->format.video.nStride = 0;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
       this->format.framerate_den) << 16;
   port->format.video.nBitrate = this->bitrate;
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
-  
+
   g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetParameter (GST_OMX_BASE (this)->handle,
       OMX_IndexParamPortDefinition, port);
   g_mutex_unlock (&_omx_mutex);
-  
+
   if (error != OMX_ErrorNone) {
     portname = "output";
     goto noport;
@@ -641,19 +654,14 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
       "Configuring port %lu: width=%lu, height=%lu, stride=%lu, format=%u, buffersize=%lu bitrate=%d",
       port->nPortIndex, port->format.video.nFrameWidth,
       port->format.video.nFrameHeight, port->format.video.nStride,
-      port->format.video.eCompressionFormat, port->nBufferSize, port->format.video.nBitrate);
+      port->format.video.eCompressionFormat, port->nBufferSize,
+      port->format.video.nBitrate);
 
-  /* TODO: Set here the notification type */
-  
-  error = gst_omx_h264_enc_dynamic_parameters (this,
-      GST_OMX_PAD (this->srcpad), &this->format);
-  if (GST_OMX_FAIL (error))
-    goto noconfiguration;
-    
+
+
   GST_INFO_OBJECT (this, "Enabling input port");
   g_mutex_lock (&_omx_mutex);
-  OMX_SendCommand (base->handle, OMX_CommandPortEnable,
-      0, NULL);
+  OMX_SendCommand (base->handle, OMX_CommandPortEnable, 0, NULL);
   g_mutex_unlock (&_omx_mutex);
 
   GST_INFO_OBJECT (this, "Waiting for input port to enable");
@@ -665,8 +673,7 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
 
   GST_INFO_OBJECT (this, "Enabling output port");
   g_mutex_lock (&_omx_mutex);
-  OMX_SendCommand (base->handle, OMX_CommandPortEnable,
-      1, NULL);
+  OMX_SendCommand (base->handle, OMX_CommandPortEnable, 1, NULL);
   g_mutex_unlock (&_omx_mutex);
 
   GST_INFO_OBJECT (this, "Waiting for output port to enable");
@@ -675,6 +682,13 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
       (gpointer) & GST_OMX_PAD (this->srcpad)->enabled, NULL);
   if (GST_OMX_FAIL (error))
     goto noenable;
+
+  error = gst_omx_h264_enc_static_parameters (this,
+      GST_OMX_PAD (this->srcpad), &this->format);
+  if (GST_OMX_FAIL (error))
+    goto noconfiguration;
+
+
 
   return error;
 
@@ -693,7 +707,7 @@ noenable:
   {
     GST_ERROR_OBJECT (this, "Failed to enable h264 encoder");
     return error;
-  }  
+  }
 }
 
 static GstFlowReturn
@@ -705,8 +719,38 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
   GstBuffer *buffer = NULL;
   GstCaps *caps = NULL;
   GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
-  
+
   GST_LOG_OBJECT (this, "H264 Encoder Fill buffer callback");
+
+
+  /* Currently we use this logic to handle IDR period since the latest
+   * EZSDK version doesn't have support for OMX_IndexConfigVideoAVCIntraPeriod
+   */
+  GST_DEBUG_OBJECT (this, "Setting encoder IDRPeriod");
+  if ((this->force_idr_period > 0) || (this->force_idr)) {
+    if ((this->cont == this->force_idr_period) || (this->force_idr)) {
+      OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
+
+      confIntraRefreshVOP.nPortIndex = 1;
+
+      OMX_GetConfig (base->handle,
+          OMX_IndexConfigVideoIntraVOPRefresh, &confIntraRefreshVOP);
+      confIntraRefreshVOP.IntraRefreshVOP = TRUE;
+
+      OMX_SetConfig (base->handle,
+          OMX_IndexConfigVideoIntraVOPRefresh, &confIntraRefreshVOP);
+
+      if (this->cont == this->force_idr_period)
+        this->cont = 0;
+
+      if (this->force_idr) {
+        this->force_idr = FALSE;
+        this->cont++;
+      }
+    } else {
+      this->cont++;
+    }
+  }
 
   caps = gst_pad_get_negotiated_caps (this->srcpad);
   if (!caps)
@@ -716,7 +760,7 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
   if (!buffer)
     goto noalloc;
 
-  GST_BUFFER_SIZE (buffer) = this->format.size;
+  GST_BUFFER_SIZE (buffer) = outbuf->nFilledLen;
   GST_BUFFER_CAPS (buffer) = caps;
   GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
   GST_BUFFER_MALLOCDATA (buffer) = (guint8 *) outbuf;
@@ -762,7 +806,7 @@ nopush:
 }
 
 static OMX_ERRORTYPE
-gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
+gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     GstOmxPad * pad, GstOmxFormat * format)
 {
   GstOmxBase *base = GST_OMX_BASE (this);
@@ -770,140 +814,157 @@ gst_omx_h264_enc_dynamic_parameters (GstOmxH264Enc * this,
   OMX_PARAM_PORTDEFINITIONTYPE *port;
   OMX_VIDEO_PARAM_AVCTYPE AVCParams;
   OMX_VIDEO_PARAM_ENCODER_PRESETTYPE EncoderPreset;
-  OMX_VIDEO_CONFIG_DYNAMICPARAMS tDynParams;
-  
+
   port = GST_OMX_PAD_PORT (pad);
 
   GST_DEBUG_OBJECT (this,
-      "Configuring dynamic parameters: bitrate=%d, profile=%d, level=%d, preset=%d, rate=%d",
+      "Configuring static parameters: bitrate=%d, profile=%d, level=%d, preset=%d, rate=%d",
       this->bitrate, this->profile,
-      this->level, this->encodingPreset,
-      this->rateControlPreset);
-      
-  GST_DEBUG_OBJECT (this, "Dynamically changing bitrate");
-  
-  GST_OMX_INIT_STRUCT (&tDynParams, OMX_VIDEO_CONFIG_DYNAMICPARAMS);
-  tDynParams.nPortIndex = 1;
+      this->level, this->encodingPreset, this->rateControlPreset);
 
-  OMX_GetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
-			 &tDynParams);
-  
-  tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.targetBitRate = this->bitrate;
-  
-  g_mutex_lock (&_omx_mutex);
-  error = OMX_SetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
-			 &tDynParams);
-  g_mutex_unlock (&_omx_mutex);
-  if (GST_OMX_FAIL (error))
-	goto nobitrate;
-	
-  GST_DEBUG_OBJECT (this, "Dynamically changing encoder AVC Parameters");
+  GST_DEBUG_OBJECT (this, "Setting ByteStream");
+  OMX_INDEXTYPE index;
+  if (OMX_GetExtensionIndex (base->handle,
+          "OMX.TI.VideoEncode.Config.NALFormat", &index) == OMX_ErrorNone) {
+    OMX_U32 nal_format;
+
+    nal_format = this->bytestream ? 0 : 1;
+    GST_DEBUG_OBJECT (base->handle,
+        "setting 'OMX.TI.VideoEncode.Config.NALFormat' to %ld", nal_format);
+
+    g_mutex_lock (&_omx_mutex);
+    error = OMX_SetParameter (base->handle, index, &nal_format);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto noNalFormat;
+  } else
+    GST_WARNING_OBJECT (this,
+        "'OMX.TI.VideoEncode.Config.NALFormat' unsupported");
+
+  GST_DEBUG_OBJECT (this, "Setting encoder AVC Parameters");
   GST_OMX_INIT_STRUCT (&AVCParams, OMX_VIDEO_PARAM_AVCTYPE);
-  AVCParams.nPortIndex = 1;
-  OMX_GetParameter(base->handle, (OMX_INDEXTYPE) OMX_IndexParamVideoAvc, &AVCParams);
+  AVCParams.nPortIndex = OMX_DirOutput;
+
+  g_mutex_lock (&_omx_mutex);
+  OMX_GetParameter (base->handle, (OMX_INDEXTYPE) OMX_IndexParamVideoAvc,
+      &AVCParams);
+  g_mutex_unlock (&_omx_mutex);
+
   AVCParams.eProfile = this->profile;
   AVCParams.eLevel = this->level;
   AVCParams.nPFrames = this->i_period - 1;
   AVCParams.nBFrames = 0;
-  
+
   g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetParameter (base->handle,
       (OMX_INDEXTYPE) OMX_IndexParamVideoAvc, &AVCParams);
   g_mutex_unlock (&_omx_mutex);
   if (GST_OMX_FAIL (error))
-	goto noAVCParams;
-  
-  GST_DEBUG_OBJECT (this, "Dynamically changing encoder preset");
+    goto noAVCParams;
+
+  GST_DEBUG_OBJECT (this, "Setting encoder preset");
   GST_OMX_INIT_STRUCT (&EncoderPreset, OMX_VIDEO_PARAM_ENCODER_PRESETTYPE);
   EncoderPreset.nPortIndex = 1;
-  OMX_GetParameter(base->handle, (OMX_INDEXTYPE) OMX_TI_IndexParamVideoEncoderPreset, &EncoderPreset);
-  
+
+  g_mutex_lock (&_omx_mutex);
+  OMX_GetParameter (base->handle,
+      (OMX_INDEXTYPE) OMX_TI_IndexParamVideoEncoderPreset, &EncoderPreset);
+  g_mutex_unlock (&_omx_mutex);
+
   EncoderPreset.eEncodingModePreset = this->encodingPreset;
   EncoderPreset.eRateControlPreset = this->rateControlPreset;
-  
+
   g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetParameter (base->handle,
       (OMX_INDEXTYPE) OMX_TI_IndexParamVideoEncoderPreset, &EncoderPreset);
   g_mutex_unlock (&_omx_mutex);
   if (GST_OMX_FAIL (error))
-	goto nopreset;
-	
-  GST_DEBUG_OBJECT (this, "Dynamically changing I frames");
-  
-  GST_OMX_INIT_STRUCT (&tDynParams, OMX_VIDEO_CONFIG_DYNAMICPARAMS);
-  tDynParams.nPortIndex = 1;
+    goto nopreset;
 
-  OMX_GetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
-			 &tDynParams);
-  
-  tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.intraFrameInterval = this->i_period;
-  
-  g_mutex_lock (&_omx_mutex);
-  error = OMX_SetConfig (base->handle, (OMX_INDEXTYPE) OMX_TI_IndexConfigVideoDynamicParams,
-			 &tDynParams);
-  g_mutex_unlock (&_omx_mutex);
-  if (GST_OMX_FAIL (error))
-	goto noiperiod;
-	
-  /* Currently we use this logic to handle IDR period since the latest
-   * EZSDK version doesn't have support for OMX_IndexConfigVideoAVCIntraPeriod
-   */
-  if ((this->force_idr_period > 0) || (this->force_idr))
-  {
-	  if ((this->cont == this->force_idr_period) || (this->force_idr))
-	  {
-		  OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
 
-		  confIntraRefreshVOP.nPortIndex = 1;
+  if (this->is_interlaced) {
 
-		  OMX_GetConfig (base->handle,
-						    OMX_IndexConfigVideoIntraVOPRefresh,
-						    &confIntraRefreshVOP);
-		  confIntraRefreshVOP.IntraRefreshVOP = TRUE;
+    OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
 
-		  OMX_SetConfig (base->handle,
-			  		     OMX_IndexConfigVideoIntraVOPRefresh,
-					     &confIntraRefreshVOP);
+    GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
 
-		  if (this->cont == this->force_idr_period)
-			  this->cont = 0;
+    tStaticParam.nPortIndex = 1;
 
-		  if (this->force_idr)
-		  {
-			  this->force_idr = FALSE;
-			  this->cont++;
-		  }
-	  } else {
-		  this->cont++;
-	  }
+    g_mutex_lock (&_omx_mutex);
+    OMX_GetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+    g_mutex_unlock (&_omx_mutex);
+
+    /* for interlace, base profile can not be used */
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_USER_DEFINED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
+        IH264_HIGH_PROFILE;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.level =
+        IH264_LEVEL_42;
+
+    /* setting Interlace mode */
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.inputContentType = IVIDEO_INTERLACED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.bottomFieldIntra = 0;
+    tStaticParam.videoStaticParams.h264EncStaticParams.interlaceCodingType =
+        IH264_INTERLACE_FIELDONLY_ARF;
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_DEFAULT;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.rateControlPreset = IVIDEO_STORAGE;
+
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra4x4Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra8x8Enable = 0x1f;
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto nointerlaced;
+
+
   }
-  
+
   return error;
 
-nobitrate:
+noNalFormat:
   {
-    GST_ERROR_OBJECT (this, "Unable to change dynamically bitrate: %s",
+    GST_ERROR_OBJECT (this, "Unable to change statically NalFormat: %s",
         gst_omx_error_to_str (error));
-    return error;
+    return;
   }
 noAVCParams:
   {
-    GST_ERROR_OBJECT (this, "Unable to change dynamically AVCParams: %s",
+    GST_ERROR_OBJECT (this, "Unable to change statically AVCParams: %s",
         gst_omx_error_to_str (error));
     return error;
   }
 nopreset:
   {
-    GST_ERROR_OBJECT (this, "Unable to change dynamically the encoder preset: %s",
+    GST_ERROR_OBJECT (this,
+        "Unable to change statically the encoder preset: %s",
         gst_omx_error_to_str (error));
     return error;
   }
 noiperiod:
   {
-    GST_ERROR_OBJECT (this, "Unable to change dynamically i-period: %s",
+    GST_ERROR_OBJECT (this, "Unable to change statically i-period: %s",
         gst_omx_error_to_str (error));
     return error;
-  }  
+  }
+nointerlaced:
+  {
+    GST_ERROR_OBJECT (this, "Unable to set interlaced settings: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
 }

@@ -1,8 +1,6 @@
-/* 
+/*
  * GStreamer
- * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
- * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
- * Copyright (C) 2014 Carlos Gomez <carlos.gomez@ridgerun.com>
+ * Copyright (C) 2014 Jose Jimenez <jose.jimenez@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,41 +18,48 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OMX_H264_DEC_H__
-#define __GST_OMX_H264_DEC_H__
+#ifndef __GST_OMX_AAC_ENC_H__
+#define __GST_OMX_AAC_ENC_H__
 
 #include <gst/gst.h>
 #include "gstomxpad.h"
 #include "gstomxbase.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_OMX_H264_DEC \
-  (gst_omx_h264_dec_get_type())
-#define GST_OMX_H264_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_H264_DEC,GstOmxH264Dec))
-#define GST_OMX_H264_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_H264_DEC,GstOmxH264DecClass))
-#define GST_IS_OMX_H264_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_H264_DEC))
-#define GST_IS_OMX_H264_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_H264_DEC))
-typedef struct _GstOmxH264Dec GstOmxH264Dec;
-typedef struct _GstOmxH264DecClass GstOmxH264DecClass;
+#define GST_TYPE_OMX_AAC_ENC \
+  (gst_omx_aac_enc_get_type())
+#define GST_OMX_AAC_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_AAC_ENC,GstOmxAACEnc))
+#define GST_OMX_AAC_ENC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_AAC_ENC,GstOmxAACEncClass))
+#define GST_IS_OMX_AAC_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_AAC_ENC))
+#define GST_IS_OMX_AAC_ENC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_AAC_ENC))
+typedef struct _GstOmxAACEnc GstOmxAACEnc;
+typedef struct _GstOmxAACEncClass GstOmxAACEncClass;
 
-struct _GstOmxH264Dec
+struct _GstOmxAACEnc
 {
   GstOmxBase element;
 
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
+
+  /* Properties */
+  gint rate;
+  gint channels;
+  guint bitrate;
+  gint profile;
+  gint output_format;
 };
 
-struct _GstOmxH264DecClass
+struct _GstOmxAACEncClass
 {
   GstOmxBaseClass parent_class;
 };
 
-GType gst_omx_h264_dec_get_type (void);
+GType gst_omx_aac_enc_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_OMX_H264_DEC_H__ */
+#endif /* __GST_OMX_AAC_ENC_H__ */

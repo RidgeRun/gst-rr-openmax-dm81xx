@@ -30,10 +30,11 @@
  * Returns: A OMX_COLOR_FORMATTYPE corresponding to @format or
  * OMX_COLOR_FormatUnused if can't find a GstVideoFormat that match it.
  */
-OMX_COLOR_FORMATTYPE gst_omx_convert_format_to_omx (GstVideoFormat format)
+OMX_COLOR_FORMATTYPE
+gst_omx_convert_format_to_omx (GstVideoFormat format)
 {
   OMX_COLOR_FORMATTYPE omx_format;
-  
+
   switch (format) {
     case GST_VIDEO_FORMAT_NV12:
       omx_format = OMX_COLOR_FormatYUV420SemiPlanar;
@@ -45,7 +46,7 @@ OMX_COLOR_FORMATTYPE gst_omx_convert_format_to_omx (GstVideoFormat format)
       omx_format = OMX_COLOR_FormatUnused;
       break;
   }
-  
+
   return omx_format;
-  
+
 }

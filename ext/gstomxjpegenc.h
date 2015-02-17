@@ -1,4 +1,4 @@
-/* 
+/*
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
  * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
@@ -20,28 +20,28 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OMX_H264_ENC_H__
-#define __GST_OMX_H264_ENC_H__
+#ifndef __GST_OMX_JPEG_ENC_H__
+#define __GST_OMX_JPEG_ENC_H__
 
 #include <gst/gst.h>
 #include "gstomxpad.h"
 #include "gstomxbase.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_OMX_H264_ENC \
-  (gst_omx_h264_enc_get_type())
-#define GST_OMX_H264_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_H264_ENC,GstOmxH264Enc))
-#define GST_OMX_H264_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_H264_ENC,GstOmxH264EncClass))
-#define GST_IS_OMX_H264_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_H264_ENC))
-#define GST_IS_OMX_H264_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_H264_ENC))
-typedef struct _GstOmxH264Enc GstOmxH264Enc;
-typedef struct _GstOmxH264EncClass GstOmxH264EncClass;
+#define GST_TYPE_OMX_JPEG_ENC \
+  (gst_omx_jpeg_enc_get_type())
+#define GST_OMX_JPEG_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_JPEG_ENC,GstOmxJpegEnc))
+#define GST_OMX_JPEG_ENC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_JPEG_ENC,GstOmxJpegEncClass))
+#define GST_IS_OMX_JPEG_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_JPEG_ENC))
+#define GST_IS_OMX_JPEG_ENC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_JPEG_ENC))
+typedef struct _GstOmxJpegEnc GstOmxJpegEnc;
+typedef struct _GstOmxJpegEncClass GstOmxJpegEncClass;
 
-struct _GstOmxH264Enc
+struct _GstOmxJpegEnc
 {
   GstOmxBase element;
 
@@ -49,26 +49,17 @@ struct _GstOmxH264Enc
   GstOmxFormat format;
 
   /* Properties */
-  //~ guint framerate;
-  guint bitrate;
-  OMX_VIDEO_AVCPROFILETYPE profile;
-  OMX_VIDEO_AVCLEVELTYPE level;
-  gboolean bytestream;
-  guint i_period;
-  guint force_idr_period;
-  gboolean force_idr;
+
   gboolean is_interlaced;
-  OMX_VIDEO_ENCODING_MODE_PRESETTYPE encodingPreset;
-  OMX_VIDEO_RATECONTROL_PRESETTYPE rateControlPreset;
-  gint cont;
+  gint quality;
 };
 
-struct _GstOmxH264EncClass
+struct _GstOmxJpegEncClass
 {
   GstOmxBaseClass parent_class;
 };
 
-GType gst_omx_h264_enc_get_type (void);
+GType gst_omx_jpeg_enc_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_OMX_H264_ENC_H__ */
+#endif /* __GST_OMX_JPEG_ENC_H__ */

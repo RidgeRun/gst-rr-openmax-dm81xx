@@ -2,7 +2,7 @@
  * GStreamer
  * Copyright (C) 2006 Stefan Kost <ensonic@users.sf.net>
  * Copyright (C) 2013 Michael Gruner <michael.gruner@ridgerun.com>
- * Copyright (C) 2014 Carlos Gomez <carlos.gomez@ridgerun.com>
+ * Copyright (C) 2015 Melissa Montero <melissa.montero@ridgerun.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,41 +20,41 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OMX_H264_DEC_H__
-#define __GST_OMX_H264_DEC_H__
+#ifndef __GST_OMX_NOISE_FILTER_H__
+#define __GST_OMX_NOISE_FILTER_H__
 
-#include <gst/gst.h>
-#include "gstomxpad.h"
 #include "gstomxbase.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_OMX_H264_DEC \
-  (gst_omx_h264_dec_get_type())
-#define GST_OMX_H264_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_H264_DEC,GstOmxH264Dec))
-#define GST_OMX_H264_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_H264_DEC,GstOmxH264DecClass))
-#define GST_IS_OMX_H264_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_H264_DEC))
-#define GST_IS_OMX_H264_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_H264_DEC))
-typedef struct _GstOmxH264Dec GstOmxH264Dec;
-typedef struct _GstOmxH264DecClass GstOmxH264DecClass;
+#define GST_TYPE_OMX_NOISE_FILTER \
+  (gst_omx_noise_filter_get_type())
+#define GST_OMX_NOISE_FILTER(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_NOISE_FILTER,GstOmxNoiseFilter))
+#define GST_OMX_NOISE_FILTER_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_NOISE_FILTER,GstOmxNoiseFilterClass))
+#define GST_IS_OMX_NOISE_FILTER(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_NOISE_FILTER))
+#define GST_IS_OMX_NOISE_FILTER_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_NOISE_FILTER))
+typedef struct _GstOmxNoiseFilter GstOmxNoiseFilter;
+typedef struct _GstOmxNoiseFilterClass GstOmxNoiseFilterClass;
 
-struct _GstOmxH264Dec
+struct _GstOmxNoiseFilter
 {
-  GstOmxBase element;
+  GstOmxBase base;
 
   GstPad *srcpad, *sinkpad;
-  GstOmxFormat format;
+  GstOmxFormat in_format;
+  GstOmxFormat out_format;
+
 };
 
-struct _GstOmxH264DecClass
+struct _GstOmxNoiseFilterClass
 {
   GstOmxBaseClass parent_class;
 };
 
-GType gst_omx_h264_dec_get_type (void);
+GType gst_omx_noise_filter_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_OMX_H264_DEC_H__ */
+#endif /* __GST_OMX_NOISE_FILTER_H__ */

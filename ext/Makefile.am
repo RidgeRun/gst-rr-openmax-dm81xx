@@ -10,10 +10,18 @@ libgstrromx_la_SOURCES = \
 	gstomxmpeg2dec.c gstomxmpeg2dec.h \
 	gstomxh264dec.c gstomxh264dec.h \
 	gstomxh264enc.c gstomxh264enc.h \
+	gstomxjpegenc.c gstomxjpegenc.h \
 	gstomxscaler.c gstomxscaler.h \
 	gstomxbuftab.c gstomxbuftab.h \
+	gstomxbufqueue.c gstomxbufqueue.h \
 	gstomxdeiscaler.c gstomxdeiscaler.h \
-	gstomxutils.c gstomxutils.h
+	gstomxutils.c gstomxutils.h \
+	gstomxbasesrc.c gstomxbasesrc.h \
+	gstomxcamera.c gstomxcamera.h \
+	gstomxaacenc.c gstomxaacenc.h \
+	gstomxaacdec.c gstomxaacdec.h \
+	gstomxrrparser.c gstomxrrparser.h \
+	gstomxnoisefilter.c gstomxnoisefilter.h
 
 # compiler and linker flags used to compile this rromx, set in configure.ac
 libgstrromx_la_CFLAGS = $(GST_CFLAGS) $(OMX_CFLAGS)
@@ -31,7 +39,15 @@ noinst_HEADERS = \
 	gstomxmpeg2dec.h \
 	gstomxh264dec.h \
 	gstomxh264enc.h \
+	gstomxjpegenc.h \
 	gstomxscaler.h \
 	gstomxbuftab.h \
+	gstomxbufqueue.h \
 	gstomxdeiscaler.h \
-	gstomxutils.h
+	gstomxutils.h \
+	gstomxbasesrc.h \
+	gstomxcamera.h \
+	gstomxaacenc.h \
+	gstomxaacdec.h \
+	gstomxrrparser.h \
+	gstomxnoisefilter.h

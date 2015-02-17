@@ -31,8 +31,14 @@
 #include "gstomxmpeg2dec.h"
 #include "gstomxh264dec.h"
 #include "gstomxh264enc.h"
+#include "gstomxjpegenc.h"
+#include "gstomxaacenc.h"
+#include "gstomxaacdec.h"
 #include "gstomxscaler.h"
 #include "gstomxdeiscaler.h"
+#include "gstomxcamera.h"
+#include "gstomxrrparser.h"
+#include "gstomxnoisefilter.h"
 #include "gstomxbufferalloc.h"
 
 /* entry point to initialize the plug-in
@@ -50,6 +56,7 @@ omx_init (GstPlugin * omx)
   g_mutex_init (&_omx_mutex);
 
 #if 0
+  ConfigureUIA uiaCfg;
   uiaCfg.enableAnalysisEvents = 0;
   /* can be 0 or 1 */
   uiaCfg.enableStatusLogger = 1;
@@ -74,9 +81,21 @@ omx_init (GstPlugin * omx)
   if (!gst_element_register (omx, "omx_h264dec", GST_RANK_NONE,
           GST_TYPE_OMX_H264_DEC))
     return FALSE;
-  
+
   if (!gst_element_register (omx, "omx_h264enc", GST_RANK_NONE,
           GST_TYPE_OMX_H264_ENC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_jpegenc", GST_RANK_NONE,
+          GST_TYPE_OMX_JPEG_ENC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_aacenc", GST_RANK_NONE,
+          GST_TYPE_OMX_AAC_ENC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_aacdec", GST_RANK_NONE,
+          GST_TYPE_OMX_AAC_DEC))
     return FALSE;
 
   if (!gst_element_register (omx, "omx_scaler", GST_RANK_NONE,
@@ -90,10 +109,22 @@ omx_init (GstPlugin * omx)
   if (!gst_element_register (omx, "omx_mdeiscaler", GST_RANK_NONE,
           GST_TYPE_OMX_MDEISCALER))
     return FALSE;
+  if (!gst_element_register (omx, "omx_camera", GST_RANK_NONE,
+          GST_TYPE_OMX_CAMERA))
+    return FALSE;
+  if (!gst_element_register (omx, "rr_h264parser", GST_RANK_NONE,
+          GST_TYPE_RRPARSER))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_noisefilter", GST_RANK_NONE,
+			     GST_TYPE_OMX_NOISE_FILTER))
+    return FALSE;
+  
   if (!gst_element_register (omx, "omxbufferalloc", GST_RANK_NONE,
           GST_TYPE_OMXBUFFERALLOC))
     return FALSE;
-  return TRUE;
+  
+return TRUE;
 }
 
 /* gstreamer looks for this structure to register omxs

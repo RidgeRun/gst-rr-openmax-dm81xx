@@ -57,18 +57,24 @@ struct _GstOmxBase
   guint input_buffers;
   guint output_buffers;
 
+  guint num_buffers;
+  guint cont;
+  GCond *num_buffers_cond;
+  GMutex *num_buffers_mutex;
+
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
   gboolean first_buffer;
   gboolean interlaced;
+  gboolean audio_component;
 
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
-  
+
   GstFlowReturn fill_ret;
-  
+
   GList *pads;
 };
 
@@ -78,12 +84,12 @@ struct _GstOmxBaseClass
 
   gchar *handle_name;
 
-  OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
+    OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
       guint32, gpointer);
-  GstFlowReturn (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-  GstFlowReturn (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-  OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
-  gboolean (*parse_caps) (GstPad *, GstCaps *);
+    GstFlowReturn (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+    GstFlowReturn (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+    OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
+    gboolean (*parse_caps) (GstPad *, GstCaps *);
   GstCaps *(*parse_buffer) (GstOmxBase *, GstBuffer *);
 
 };

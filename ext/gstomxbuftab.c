@@ -24,7 +24,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_buf_tab_debug);
 #define GST_CAT_DEFAULT gst_omx_buf_tab_debug
 
-static gboolean gst_omx_buf_tab_debug_register=FALSE;
+static gboolean gst_omx_buf_tab_debug_register = FALSE;
 
 OMX_ERRORTYPE
 gst_omx_buf_tab_mark_buffer (GstOmxBufTab * buftab,
@@ -45,7 +45,8 @@ gst_omx_buf_tab_compare (gconstpointer _node, gconstpointer _buffer)
   nodedata = (GstOmxBufferData *) node->buffer->pAppPrivate;
   bufferdata = (GstOmxBufferData *) buffer->pAppPrivate;
 
-  GST_LOG ("ID of Buffer in buftab: %i , ID of External buffer %i ", nodedata->id, bufferdata->id );
+  GST_LOG ("ID of Buffer in buftab: %i , ID of External buffer %i ",
+      nodedata->id, bufferdata->id);
   return nodedata->id - bufferdata->id;
 }
 
@@ -66,7 +67,7 @@ gst_omx_buf_tab_find_buffer (GstOmxBufTab * buftab,
   node = NULL;
 
   g_mutex_lock (&buftab->tabmutex);
-  GST_LOG("Finding buffer ...");
+  GST_LOG ("Finding buffer ...");
   toreturn = g_list_find_custom (buftab->table, (gconstpointer) peerbuffer,
       (GCompareFunc) gst_omx_buf_tab_compare);
   if (!toreturn)
@@ -75,12 +76,13 @@ gst_omx_buf_tab_find_buffer (GstOmxBufTab * buftab,
   node = (GstOmxBufTabNode *) toreturn->data;
   *buffer = node->buffer;
   *busy = node->busy;
-  GST_LOG(" Buffer found ...");
+  GST_LOG (" Buffer found ...");
   g_mutex_unlock (&buftab->tabmutex);
 
   return error;
 
 notfound:
+  GST_ERROR (" Resources Lost ...");
   g_mutex_unlock (&buftab->tabmutex);
   error = OMX_ErrorResourcesLost;
   return error;
@@ -91,11 +93,10 @@ GstOmxBufTab *
 gst_omx_buf_tab_new ()
 {
   GstOmxBufTab *buftab = NULL;
-  if(!gst_omx_buf_tab_debug_register){
+  if (!gst_omx_buf_tab_debug_register) {
     /* debug category for fltering log messages */
-    GST_DEBUG_CATEGORY_INIT (gst_omx_buf_tab_debug, "buftab", 0,
-			     "OMX buftab");
-    gst_omx_buf_tab_debug_register=TRUE;
+    GST_DEBUG_CATEGORY_INIT (gst_omx_buf_tab_debug, "buftab", 0, "OMX buftab");
+    gst_omx_buf_tab_debug_register = TRUE;
   }
 
   buftab = g_malloc0 (sizeof (GstOmxBufTab));
@@ -168,7 +169,7 @@ gst_omx_buf_tab_mark_buffer (GstOmxBufTab * buftab,
   error = OMX_ErrorNone;
   toreturn = NULL;
   node = NULL;
-  GST_LOG("Marking buffer ... ");
+  GST_LOG ("Marking buffer ... ");
   g_mutex_lock (&buftab->tabmutex);
 
   toreturn = g_list_find_custom (buftab->table, (gconstpointer) buffer,
@@ -176,12 +177,14 @@ gst_omx_buf_tab_mark_buffer (GstOmxBufTab * buftab,
   if (!toreturn)
     goto notfound;
   node = (GstOmxBufTabNode *) toreturn->data;
-  GST_LOG("Marking Buffer %p -> %p as %s ",  node->buffer, node->buffer->pBuffer , busy ? "Used" : "Free");
+  GST_LOG ("Marking Buffer %p -> %p as %s ", node->buffer,
+      node->buffer->pBuffer, busy ? "Used" : "Free");
   if (node->busy != busy) {
     node->busy = busy;
     buftab->tabused += busy ? 1 : -1;
   }
-GST_LOG("Buffer %p -> %p set as %s ",  node->buffer, node->buffer->pBuffer , busy ? "Used" : "Free");
+  GST_LOG ("Buffer %p -> %p set as %s ", node->buffer, node->buffer->pBuffer,
+      busy ? "Used" : "Free");
   g_cond_signal (&buftab->tabcond);
   g_mutex_unlock (&buftab->tabmutex);
 
@@ -285,6 +288,7 @@ timeout:
   g_mutex_unlock (&buftab->tabmutex);
   error = OMX_ErrorTimeout;
   return error;
+
 }
 
 OMX_ERRORTYPE

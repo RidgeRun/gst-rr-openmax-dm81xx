@@ -32,7 +32,6 @@ G_BEGIN_DECLS
   (gst_omx_hdeiscaler_get_type())
 #define GST_TYPE_OMX_MDEISCALER \
   (gst_omx_mdeiscaler_get_type())
-
 #define GST_OMX_DEISCALER(obj) \
   ((GstOmxDeiscaler*) obj)
 #define GST_OMX_DEISCALER_CLASS(klass) \
@@ -41,7 +40,6 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_DEISCALER))
 #define GST_IS_OMX_DEISCALER_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_DEISCALER))
-  
 typedef struct _GstOmxDeiscaler GstOmxDeiscaler;
 typedef struct _GstOmxDeiscalerClass GstOmxDeiscalerClass;
 
@@ -68,7 +66,7 @@ struct _GstOmxDeiscaler
 
   GstOmxFormat in_format;
   GList *out_formats;
-  
+
   /* Properties */
   guint framerate_divisor;
   gchar *crop_str;
