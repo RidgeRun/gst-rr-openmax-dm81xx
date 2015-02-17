@@ -1144,7 +1144,6 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   GList *peerbuffers = NULL, *currentbuffer = NULL;
   guint i;
   GstOmxBufferData *bufdata = NULL;
-  GstOmxBufferData *bufdatatemp = NULL;
   guint32 maxsize, size = 0;
   gboolean divided_buffers = FALSE;
   gboolean top_field = TRUE;
@@ -1246,7 +1245,8 @@ nouse:
   }
 noalloc:
   {
-    GST_ERROR_OBJECT (this, "Failed to allocate buffers");
+    GST_ERROR_OBJECT (this, "Failed to allocate buffers: %s",
+		 gst_omx_error_to_str (error));
     g_free (bufdata);
     /*TODO: should I free buffers? */
     return error;
@@ -1552,10 +1552,10 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
     goto illegal;
 
   if (flushing)
-    goto flushing;
+    goto drop;
 
   if (this->fill_ret != GST_FLOW_OK)
-    goto flushing;
+    goto drop;
 
   GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
       GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
@@ -1832,13 +1832,6 @@ noreturn:
   {
     GST_ELEMENT_ERROR (GST_ELEMENT (this), LIBRARY, ENCODE,
         ("Malformed buffer list"), (NULL));
-    return;
-  }
-flushing:
-  {
-    GST_DEBUG_OBJECT (this,
-        "Discarded buffer %p->%p due to flushing component", buffer,
-        buffer->pBuffer);
     return;
   }
 nofill:
