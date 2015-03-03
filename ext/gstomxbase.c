@@ -448,7 +448,11 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   if (!this->started) {
     if (GST_OMX_IS_OMX_BUFFER (buf)) {
       GST_INFO_OBJECT (this, "Sharing upstream peer buffers");
-      omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+      if (buf->parent != NULL) {
+		omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf->parent);
+	  } else {
+		omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buf);
+	  }
     }
 
     GST_INFO_OBJECT (this, "Starting component");
