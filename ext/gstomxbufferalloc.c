@@ -47,15 +47,15 @@ GST_DEBUG_CATEGORY_STATIC (gst_omxbufferalloc_debug);
 
 enum
 {
-  /* FILL ME */
-  LAST_SIGNAL
+    /* FILL ME */
+    LAST_SIGNAL
 };
 
 enum
 {
-  PROP_0,
-  PROP_SILENT,
-  PROP_NUMBUFFERS
+    PROP_0,
+    PROP_SILENT,
+    PROP_NUMBUFFERS
 };
 
 #define GST_OMX_BUFFERALLOC_SILENT_DEFAULT	FALSE
@@ -148,7 +148,7 @@ gst_omx_buffer_alloc_init (GstOmxBufferAlloc * this,
     this->num_buffers = GST_OMX_BUFFERALLOC_NUMBUFFERS_DEFAULT;
     this->buffers = NULL;
     this->omx_library = "libOMX_Core.so";
-    this->cnt = 0;
+    this->cnt = -1;
 
     this->sinkpad = GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
                              (&sink_template), "sink"));
@@ -286,7 +286,7 @@ gst_omx_buffer_alloc_chain (GstPad * pad, GstBuffer * buf)
 void gst_omx_buffer_alloc_allocate_buffers (GstOmxBufferAlloc *this, GstOmxPad * pad, guint size)
 {
     OMX_ERRORTYPE error = OMX_ErrorNone;
-    guint i;
+    gint i;
     GstOmxBufferData *bufdata = NULL;
 
     GST_INFO_OBJECT (this, "Allocating buffers for %s:%s",
@@ -305,10 +305,14 @@ void gst_omx_buffer_alloc_allocate_buffers (GstOmxBufferAlloc *this, GstOmxPad *
         this->buffers[i]->pBuffer = Memory_alloc (this->heap, size, 128, NULL);
         this->buffers[i]->nAllocLen = size;
         this->buffers[i]->pAppPrivate = bufdata;
+        printf("allocated outbuf (bufferheadertype):%p, bufferdata %p, pbuffer %p, id %d\n",this->buffers[i],bufdata,this->buffers[i]->pBuffer,i);
+    }
+
+    for (i = this->num_buffers - 1; i >= 0; i--)
+    {
         error = gst_omx_buf_tab_add_buffer (pad->buffers, this->buffers[i]);
         if (GST_OMX_FAIL (error))
             goto noaddbuffer;
-        printf("allocated outbuf (bufferheadertype):%p, bufferdata %p, pbuffer %p, id %d\n",this->buffers[i],bufdata,this->buffers[i]->pBuffer,i);
     }
     this->allocSize = size;
     return;
@@ -410,7 +414,8 @@ gst_omx_buffer_alloc_free_buffers (GstOmxBufferAlloc * this, GstOmxPad * pad)
     if (!buffers)
         return error;
 
-    for (i = 0; i < pad->port->nBufferCountActual; ++i)
+    GST_DEBUG_OBJECT (this, "buffer count %d",this->num_buffers);
+    for (i = 0; i < this->num_buffers; ++i)
     {
 
         if (!buffers)
@@ -494,6 +499,7 @@ gst_omx_buffer_alloc_change_state (GstElement *element,
         gst_omx_buffer_alloc_free_buffers (this, omxpad);
         g_free(this->buffers);
         this->buffers = NULL;
+        this->cnt = -1;
         break;
     case GST_STATE_CHANGE_READY_TO_NULL:
         GST_DEBUG_OBJECT (this, "Changing state from ready to null");
