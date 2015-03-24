@@ -1398,8 +1398,11 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   pad->flushing = TRUE;
   GST_OBJECT_UNLOCK (pad);
 
+  if (GST_PAD_IS_SRC (pad))
+    return error;
+
   g_mutex_lock (&_omx_mutex);
-  error = OMX_SendCommand (this->handle, OMX_CommandFlush, GST_OMX_PAD_PORT (pad)->nPortIndex, NULL);
+  error = OMX_SendCommand (this->handle, OMX_CommandFlush, -1, NULL);
   g_mutex_unlock (&_omx_mutex);
 
   GST_DEBUG_OBJECT (this, "Waiting for port to flush");
