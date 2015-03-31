@@ -225,11 +225,18 @@ gst_omx_noise_filter_set_caps (GstPad * pad, GstCaps * caps)
   }
 
   this->in_format.format = GST_VIDEO_FORMAT_YUY2;
+
+  /* 32-bit align */
+  this->in_format.width_padded = (this->in_format.width+31) & 0xFFFFFFE0;
+  this->in_format.height_padded = (this->in_format.height+31) & 0xFFFFFFE0;
+
   /* This is always fixed */
   this->in_format.size = gst_video_format_get_size (this->in_format.format,
       this->in_format.width, this->in_format.height);
 
-  this->in_format.size_padded = this->in_format.size;
+  this->in_format.size_padded = gst_video_format_get_size (this->in_format.format,
+      this->in_format.width_padded, this->in_format.height_padded);
+
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
       "\tFormat YUY2\n"
@@ -255,10 +262,15 @@ gst_omx_noise_filter_set_caps (GstPad * pad, GstCaps * caps)
 
   GST_DEBUG_OBJECT (this, "Output caps: %s", gst_caps_to_string (newcaps));
 
-  this->out_format.width_padded = this->out_format.width;
+  /* 32-bit align */
+  this->out_format.width_padded = (this->out_format.width+31) & 0xFFFFFFE0;
+  this->out_format.height_padded = (this->out_format.height+31) & 0xFFFFFFE0;
+
   this->out_format.size = gst_video_format_get_size (this->out_format.format,
       this->out_format.width, this->out_format.height);
-  this->out_format.size_padded = this->out_format.size;
+
+  this->out_format.size_padded = gst_video_format_get_size (this->out_format.format,
+      this->out_format.width_padded, this->out_format.height_padded);
 
   GST_INFO_OBJECT (this, "Parsed for output caps:\n"
       "\tSize: %ux%u\n"
@@ -335,8 +347,8 @@ gst_omx_noise_filter_init_pads (GstOmxBase * base)
   port->eDir = OMX_DirInput;
 
   port->nBufferCountActual = base->input_buffers;;
-  port->format.video.nFrameWidth = this->in_format.width;       //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
-  port->format.video.nFrameHeight = this->in_format.height;     //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
+  port->format.video.nFrameWidth = this->in_format.width_padded;       //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
+  port->format.video.nFrameHeight = this->in_format.height_padded;     //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
   port->format.video.nStride = this->in_format.width_padded * 2;
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
   port->format.video.eColorFormat = OMX_COLOR_FormatYCbYCr;
@@ -359,8 +371,8 @@ gst_omx_noise_filter_init_pads (GstOmxBase * base)
   port->eDir = OMX_DirOutput;
 
   port->nBufferCountActual = base->output_buffers;
-  port->format.video.nFrameWidth = this->out_format.width;      //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
-  port->format.video.nFrameHeight = this->out_format.height;    //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
+  port->format.video.nFrameWidth = this->out_format.width_padded;      //OMX_VFPC_DEFAULT_INPUT_FRAME_WIDTH;
+  port->format.video.nFrameHeight = this->out_format.height_padded;    //OMX_VFPC_DEFAULT_INPUT_FRAME_HEIGHT;
   port->format.video.nStride = this->out_format.width_padded;
   port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
   port->nBufferSize = this->out_format.size_padded;
@@ -512,8 +524,8 @@ gst_omx_noise_filter_dynamic_configuration (GstOmxNoiseFilter * this,
 
   GST_DEBUG_OBJECT (this, "Dynamically changing resolution");
   GST_OMX_INIT_STRUCT (&resolution, OMX_CONFIG_VIDCHANNEL_RESOLUTION);
-  resolution.Frm0Width = format->width;
-  resolution.Frm0Height = format->height;
+  resolution.Frm0Width = format->width_padded;
+  resolution.Frm0Height = format->height_padded;
   resolution.Frm0Pitch = port->eDir == OMX_DirInput ?
       format->width_padded * 2 : format->width_padded;
   resolution.Frm1Width = 0;

@@ -49,7 +49,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_base_src_debug);
 #define GST_CAT_DEFAULT gst_omx_base_src_debug
 
-
+#define FIELD_TYPE_FLAG_SHIFT 16
+#define BOTTOM_FIELD_FLAG 3
+#define TOP_FIELD_FLAG 1
 #define GST_OMX_BASE_SRC_NUM_OUTPUT_BUFFERS_DEFAULT    8
 #define PROP_ALWAYS_COPY_DEFAULT          FALSE
 
@@ -166,6 +168,7 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   this->started = FALSE;
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
+  this->first_field = TRUE;
 
   /* Initialize properties */
   this->always_copy = PROP_ALWAYS_COPY_DEFAULT;
@@ -1280,6 +1283,7 @@ gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
   GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
   OMX_ERRORTYPE error = OMX_ErrorNone;
   gboolean flushing;
+  OMX_U32 nFlags;
 
   GST_LOG_OBJECT (this, "Fill buffer callback for buffer %p->%p", outbuf,
       outbuf->pBuffer);
@@ -1287,6 +1291,17 @@ gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
   GST_OBJECT_LOCK (this);
   flushing = this->flushing;
   GST_OBJECT_UNLOCK (this);
+
+  if (this->first_field && this->interlaced){
+    nFlags = outbuf->nFlags;
+    GST_INFO_OBJECT (this, "Check flags %p", nFlags);
+    this->first_field = FALSE;
+    if ((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == BOTTOM_FIELD_FLAG){
+      GST_INFO_OBJECT (this, "Discard bottom field, check val %p", 
+      outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT);
+      goto flushing;
+    }
+  }
 
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
 

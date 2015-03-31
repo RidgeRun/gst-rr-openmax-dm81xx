@@ -66,6 +66,7 @@ struct _GstOmxBaseSrc
   gboolean started;
   gboolean first_buffer;
   gboolean interlaced;
+  gboolean first_field;
 
   OMX_STATETYPE state;
   GMutex waitmutex;

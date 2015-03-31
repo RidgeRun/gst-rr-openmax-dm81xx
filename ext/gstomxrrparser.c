@@ -134,6 +134,9 @@ gst_rrparser_class_init (GstRRParserClass * klass)
   g_object_class_install_property (gobject_class, SINGLE_NALU,
       g_param_spec_boolean ("singleNalu", "SingleNalu", "Buffers are single Nal units",
           FALSE, G_PARAM_READWRITE));
+    /* debug category for filtering log messages */
+  GST_DEBUG_CATEGORY_INIT (gst_rrparser_debug, "rr_h264parser",
+      0, "RidgeRun's H264 parser");
 }
 
 static gboolean gst_rrparser_sink_event(GstPad *pad, GstEvent *event)
