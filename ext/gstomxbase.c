@@ -71,6 +71,7 @@ enum
 
 #define gst_omx_base_parent_class parent_class
 static GstElementClass *parent_class = NULL;
+static gint gst_omx_base_bottom_flag = 0;
 
 static void gst_omx_base_base_init (gpointer g_class);
 static void gst_omx_base_class_init (GstOmxBaseClass * klass);
@@ -335,7 +336,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->started = FALSE;
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
-
+  this->joined_fields = TRUE;
   this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
   this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;
 
@@ -523,7 +524,15 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 return before we check if the buffer is interlaced */
   bufdata->buffer = gst_buffer_ref (buf);
 
-  if (this->interlaced)
+  
+  if (this->interlaced && !this->joined_fields) {
+    GST_LOG_OBJECT (this, "Sending bottom/top field buffer flag");
+    omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
+      gst_omx_base_bottom_flag ?  OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE_BOTTOM : 0;
+    gst_omx_base_bottom_flag = !gst_omx_base_bottom_flag;
+  }
+  
+  else
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE;
 
 
@@ -536,7 +545,7 @@ return before we check if the buffer is interlaced */
     goto noempty;
   }
 
-  if (this->interlaced && GST_OMX_IS_OMX_BUFFER (buf)) {
+  if ( this->joined_fields && this->interlaced && GST_OMX_IS_OMX_BUFFER (buf)) {
     OMX_BUFFERHEADERTYPE tmpbuf;
     gint tmpid;
     tmpbuf.pBuffer = omxbuf->pBuffer + this->field_offset;
@@ -1115,7 +1124,7 @@ gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
   peerbufdata = (GstOmxBufferData *) omxpeerbuffer->pAppPrivate;
   peerpad = peerbufdata->pad;
 
-  if (this->interlaced) {
+  if (this->interlaced &&  this->joined_fields) {
     numbufs = numbufs >> 1;
     this->field_offset =
         (omxpeerbuffer->nFilledLen + omxpeerbuffer->nOffset) / 3;
@@ -1167,7 +1176,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       goto out;
   }
 
-  if (this->interlaced)
+  if (this->interlaced &&  this->joined_fields)
     divided_buffers = TRUE;
 
   GST_DEBUG_OBJECT (this, "Allocating buffers for %s:%s",

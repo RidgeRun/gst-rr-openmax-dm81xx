@@ -219,7 +219,7 @@ gst_omx_noise_filter_set_caps (GstPad * pad, GstCaps * caps)
   }
 
   GST_DEBUG_OBJECT (this, "Reading interlaced");
-  if (!gst_structure_get_int (structure, "interlaced",
+  if (!gst_structure_get_boolean (structure, "interlaced",
           &this->in_format.interlaced)) {
     this->in_format.interlaced = FALSE;
   }

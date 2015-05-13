@@ -67,6 +67,7 @@ struct _GstOmxBase
   gboolean started;
   gboolean first_buffer;
   gboolean interlaced;
+  gboolean joined_fields;
   gboolean audio_component;
 
   OMX_STATETYPE state;

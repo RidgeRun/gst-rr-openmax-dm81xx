@@ -72,9 +72,11 @@ enum
   PROP_0,
   PROP_RATE_DIV,
   PROP_CROP_AREA,
+  PROP_JOINED_FIELDS,
 };
 #define GST_OMX_DEISCALER_RATE_DIV_DEFAULT       1
 #define GST_OMX_DEISCALER_CROP_AREA_DEFAULT      NULL
+#define GST_OMX_DEISCALER_JOINED_FIELDS_DEFAULT 1
 
 #define gst_omx_deiscaler_parent_class parent_class
 
@@ -175,6 +177,10 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
           "Selects the crop area using the format <startX>,<startY>@"
           "<cropWidth>x<cropHeight>", GST_OMX_DEISCALER_CROP_AREA_DEFAULT,
           G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_JOINED_FIELDS,
+      g_param_spec_boolean ("joined-fields", "Joined Fields",
+          "Select if the deinterlacer should assume that bottom and top fields are on the same buffer",
+          GST_OMX_DEISCALER_JOINED_FIELDS_DEFAULT, G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_deiscaler_set_caps);
   gstomxbase_class->init_ports =
@@ -304,7 +310,7 @@ gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
-
+  GstOmxBase *base = GST_OMX_BASE (this);
   switch (prop_id) {
     case PROP_RATE_DIV:
       this->framerate_divisor = g_value_get_uint (value);
@@ -317,6 +323,9 @@ gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
           gst_omx_deiscaler_get_crop_params (this, this->crop_str,
           &this->crop_area);
       break;
+    case PROP_JOINED_FIELDS:
+      base->joined_fields = g_value_get_boolean(value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -328,13 +337,17 @@ gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
   GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
-
+  GstOmxBase *base = GST_OMX_BASE (this);
+  
   switch (prop_id) {
     case PROP_RATE_DIV:
       g_value_set_uint (value, this->framerate_divisor);
       break;
     case PROP_CROP_AREA:
       g_value_set_string (value, this->crop_str);
+      break;
+    case PROP_JOINED_FIELDS:
+      g_value_set_boolean (value, base->joined_fields);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -659,7 +672,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
   port->bBuffersContiguous = 0;
   port->nBufferCountActual = base->input_buffers;
 
-  if (base->interlaced)
+  if (base->interlaced && base->joined_fields)
     port->nBufferCountActual *= 2;
 
   g_mutex_lock (&_omx_mutex);
