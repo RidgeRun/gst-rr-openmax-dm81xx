@@ -366,12 +366,20 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   }
 
   if (base->interlaced) {
-    this->format.size_padded = gst_video_format_get_size (this->format.format,
-							  this->format.width_padded,
-							  (this->format.height_padded / 2));
-    this->format.size =
-        gst_video_format_get_size (this->format.format, this->format.width,
-        this->format.height / 2);
+    if (!this->field_merged) {
+		this->format.size_padded = gst_video_format_get_size (this->format.format,
+								  this->format.width_padded,
+								  (this->format.height_padded / 2));
+		this->format.size =
+			gst_video_format_get_size (this->format.format, this->format.width,
+			this->format.height / 2);
+	} else {
+		this->format.size_padded =
+			gst_video_format_get_size (this->format.format,
+			this->format.width_padded, this->format.height_padded);
+		this->format.size = gst_video_format_get_size (this->format.format,
+			this->format.width, this->format.height);
+	}
   } else {
     this->format.size_padded =
       gst_video_format_get_size (this->format.format,
