@@ -295,6 +295,7 @@ gst_omx_h264_enc_init (GstOmxH264Enc * this)
   this->rateControlPreset = GST_OMX_H264_ENC_RATE_CTRL_DEFAULT;
   this->cont = 0;
   this->is_interlaced = FALSE;
+  this->field_merged = FALSE;
 
   /* Add pads */
   this->sinkpad =
@@ -467,6 +468,10 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
           &this->is_interlaced))
     this->is_interlaced = FALSE;
 
+  if (!gst_structure_get_boolean (structure, "field-merged",
+          &this->field_merged))
+    this->field_merged = FALSE;
+
   GST_DEBUG_OBJECT (this, "Reading framerate");
   if (!gst_structure_get_fraction (structure, "framerate",
           &this->format.framerate_num, &this->format.framerate_den)) {
@@ -591,9 +596,9 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   port->nBufferCountActual = base->input_buffers;
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
-  if (this->is_interlaced) {
-    port->format.video.nFrameHeight = this->format.height * 0.5;
-  }
+  if (this->is_interlaced)
+	port->format.video.nFrameHeight = this->format.height * 0.5;
+
   port->format.video.nStride = this->format.width;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
@@ -931,7 +936,30 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     if (GST_OMX_FAIL (error))
       goto nointerlaced;
 
+    OMX_VIDEO_PARAM_FRAMEDATACONTENTTYPE tFramDataContentType;
 
+    GST_DEBUG_OBJECT (this, "Setting frame format");
+	GST_OMX_INIT_STRUCT (&tFramDataContentType, OMX_VIDEO_PARAM_FRAMEDATACONTENTTYPE);
+	tFramDataContentType.nPortIndex = 1;
+
+	g_mutex_lock (&_omx_mutex);
+	OMX_GetParameter (base->handle,
+		(OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings, &tFramDataContentType);
+	g_mutex_unlock (&_omx_mutex);
+
+	if (this->field_merged)
+		tFramDataContentType.eFrameFormat = OMX_Video_Format_Frame;
+	else
+		tFramDataContentType.eFrameFormat = OMX_Video_Format_Field;
+
+	g_mutex_lock (&_omx_mutex);
+	error =
+	  OMX_SetParameter (base->handle,
+	  (OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings, &tFramDataContentType);
+	g_mutex_unlock (&_omx_mutex);
+	if (GST_OMX_FAIL (error)) {
+		goto nointerlaced;
+	}
   }
 
   return error;
