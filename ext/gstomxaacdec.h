@@ -46,6 +46,7 @@ struct _GstOmxAACDec
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
   gboolean framed;
+  gboolean always_copy;
   gint mpegversion;
   gint aacversion;
 
