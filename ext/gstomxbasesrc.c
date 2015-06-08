@@ -66,7 +66,7 @@ enum
 
 #define gst_omx_base_src_parent_class parent_class
 static GstBaseSrcClass *parent_class = NULL;
-
+static guint gst_omx_base_src_last_flag;
 
 static void gst_omx_base_src_base_init (gpointer g_class);
 static void gst_omx_base_src_class_init (GstOmxBaseSrcClass * klass);
@@ -1296,13 +1296,21 @@ gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
     nFlags = outbuf->nFlags;
     GST_INFO_OBJECT (this, "Check flags %p", nFlags);
     this->first_field = FALSE;
+    gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
     if ((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == BOTTOM_FIELD_FLAG){
       GST_INFO_OBJECT (this, "Discard bottom field, check val %p", 
       outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT);
-      goto flushing;
+      goto drop;
     }
   }
-
+  
+  if(!this->first_field && this->interlaced) {
+    if((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == gst_omx_base_src_last_flag){
+      goto drop;
+    }
+    gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
+  }
+  
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
 
   if (busy)
@@ -1343,15 +1351,14 @@ flushing:
     return error;
   }
 
-  /*drop:
-     {
-     GST_LOG_OBJECT (this, "Dropping buffer, push error %s",
-     gst_flow_get_name (this->fill_ret));
+drop:
+  {
+    GST_DEBUG_OBJECT (this, "Dropping buffer %d", bufdata->id);
      g_mutex_lock (&_omx_mutex);
      error = this->component->FillThisBuffer (this->handle, outbuf);
      g_mutex_unlock (&_omx_mutex);
      return error;
-     } */
+     } 
 }
 
 
