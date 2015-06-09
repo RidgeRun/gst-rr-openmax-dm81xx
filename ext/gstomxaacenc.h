@@ -52,6 +52,7 @@ struct _GstOmxAACEnc
   guint bitrate;
   gint profile;
   gint output_format;
+  gboolean always_copy;
 };
 
 struct _GstOmxAACEncClass

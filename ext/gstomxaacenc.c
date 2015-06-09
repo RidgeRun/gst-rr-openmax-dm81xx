@@ -48,13 +48,14 @@ enum
   PROP_0,
   PROP_BITRATE,
   PROP_PROFILE,
-  PROP_OUTPUT_FORMAT
+  PROP_OUTPUT_FORMAT,
+  PROP_ALWAYS_COPY,
 };
 
 #define GST_OMX_AAC_ENC_BITRATE_DEFAULT 128000
 #define GST_OMX_AAC_ENC_PROFILE_DEFAULT OMX_AUDIO_AACObjectLC
 #define GST_OMX_AAC_ENC_OUTPUT_FORMAT_DEFAULT OMX_AUDIO_AACStreamFormatRAW
-
+#define GST_OMX_AAC_ENC_ALWAYS_COPY_DEFAULT FALSE
 
 gint gst_omx_aac_rateIdx[] =
     { 96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000,
@@ -182,6 +183,9 @@ gst_omx_aac_enc_class_init (GstOmxAACEncClass * klass)
           "Sets the AAC output format",
           GST_TYPE_OMX_AAC_ENC_OUTPUT_FORMAT,
           GST_OMX_AAC_ENC_OUTPUT_FORMAT_DEFAULT, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_ALWAYS_COPY,
+      g_param_spec_boolean ("always-copy", "Always Copy",
+          "Always copy the output buffer", GST_OMX_AAC_ENC_ALWAYS_COPY_DEFAULT, G_PARAM_READWRITE));
 
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_aac_enc_set_caps);
@@ -248,6 +252,10 @@ gst_omx_aac_enc_set_property (GObject * object, guint prop_id,
       GST_INFO_OBJECT (this, "Setting output format to %d",
           this->output_format);
       break;
+    case PROP_ALWAYS_COPY:
+      this->always_copy = g_value_get_boolean (value);
+      GST_INFO_OBJECT (this, "Setting always-copy to %d", this->always_copy);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -270,6 +278,9 @@ gst_omx_aac_enc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_OUTPUT_FORMAT:
       g_value_set_enum (value, this->output_format);
+      break;
+    case PROP_ALWAYS_COPY:
+      g_value_set_boolean (value, this->always_copy);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -654,29 +665,49 @@ gst_omx_aac_enc_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
     goto nocaps;
 
 
-  buffer = gst_buffer_new ();
-  if (!buffer)
+  if(!this->always_copy){
+
+    buffer = gst_buffer_new ();
+    if (!buffer)
     goto noalloc;
+    
+    GST_BUFFER_SIZE (buffer) = outbuf->nFilledLen;
+    GST_BUFFER_CAPS (buffer) = caps;
+    GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
+    GST_BUFFER_MALLOCDATA (buffer) = (guint8 *) outbuf;
+    GST_BUFFER_FREE_FUNC (buffer) = gst_omx_base_release_buffer;
+    
+    /* Make buffer fields GStreamer friendly */
+    GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
+    GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
+    bufdata->buffer = buffer;
 
-  GST_BUFFER_SIZE (buffer) = outbuf->nFilledLen;
-  GST_BUFFER_CAPS (buffer) = caps;
-  GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
-  GST_BUFFER_MALLOCDATA (buffer) = (guint8 *) outbuf;
-  GST_BUFFER_FREE_FUNC (buffer) = gst_omx_base_release_buffer;
+    GST_LOG_OBJECT (this,
+		    "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
+		    GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
+		    GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
+    
+    GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
+		    outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
+  }
 
-  /* Make buffer fields GStreamer friendly */
-  GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
-  GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
-  bufdata->buffer = buffer;
+ else{
 
-  GST_LOG_OBJECT (this,
+    buffer =  gst_buffer_new_and_alloc(outbuf->nFilledLen);
+    if (!buffer)
+      goto noalloc;
+    gst_buffer_set_caps(buffer,caps);
+    memcpy(buffer->data,outbuf->pBuffer,outbuf->nFilledLen);
+    GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
+    GST_LOG_OBJECT (this,
       "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
       GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
       GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
 
   GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
       outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
-
+    gst_omx_base_release_buffer(outbuf);
+  }
   ret = gst_pad_push (this->srcpad, buffer);
 
   if (GST_FLOW_OK != ret)
