@@ -345,6 +345,9 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
+  g_mutex_init (&this->pausedwaitmutex);
+  g_cond_init (&this->pausedwaitcond);
+  this->block_buffers =FALSE;
 
   this->num_buffers = 0;
   this->cont = 0;
@@ -599,6 +602,15 @@ return before we check if the buffer is interlaced */
   /* g_cond_wait (&this->waitcond, &this->waitmutex); */
   /* g_mutex_unlock (&this->waitmutex); */
   gst_buffer_unref (buf);
+  this->prerolled_buffers++;
+
+  g_mutex_lock (&this->pausedwaitmutex);
+    while (this->block_buffers && (this->prerolled_buffers >= this->input_buffers - 3 )) {
+    g_cond_wait(&this->pausedwaitcond, &this->pausedwaitmutex);
+  }
+  g_mutex_unlock (&this->pausedwaitmutex);
+
+
   return GST_FLOW_OK;
 
 flushing:
@@ -984,16 +996,23 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
   GstOmxBase *this = GST_OMX_BASE (element);
 
   switch (transition) {
-    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-      /*Start processing buffers for DSP components */
-      if (this->audio_component) {
-        GST_OBJECT_LOCK (this);
-        this->flushing = FALSE;
-        GST_OBJECT_UNLOCK (this);
-      }
-      break;
-    default:
-      break;
+  case GST_STATE_CHANGE_READY_TO_PAUSED:
+    this->prerolled_buffers=1;
+    g_mutex_lock (&this->pausedwaitmutex);
+    this->block_buffers = TRUE;
+    g_mutex_unlock (&this->pausedwaitmutex);
+    break;
+  default:
+    break;
+  case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+    /*Start processing buffers for DSP components */
+    this->block_buffers = FALSE;
+    g_cond_signal (&this->pausedwaitcond);
+    if (this->audio_component) {
+      GST_OBJECT_LOCK (this);
+      this->flushing = FALSE;
+      GST_OBJECT_UNLOCK (this);
+    }
   }
 
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
@@ -1001,19 +1020,23 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
     return ret;
 
   switch (transition) {
-    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-      /*Dont try to push any more buffers for DSP components */
-      if (this->audio_component) {
-        GST_OBJECT_LOCK (this);
-        this->flushing = TRUE;
-        GST_OBJECT_UNLOCK (this);
-      }
-      break;
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      gst_omx_base_stop (this);
-      break;
-    default:
-      break;
+  case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+    /*Dont try to push any more buffers for DSP components */
+    if (this->audio_component) {
+      GST_OBJECT_LOCK (this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+    }
+    break;
+  case GST_STATE_CHANGE_PAUSED_TO_READY:
+    this->block_buffers = FALSE;
+    g_cond_signal (&this->pausedwaitcond);
+    break;
+  case GST_STATE_CHANGE_READY_TO_NULL:
+    gst_omx_base_stop (this);
+    break;
+  default:
+    break;
   }
 
   return ret;

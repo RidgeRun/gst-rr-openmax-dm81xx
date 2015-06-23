@@ -650,7 +650,7 @@ gst_omx_deiscaler_init_pads (GstOmxBase * base)
     GST_LOG_OBJECT (this, "Setting memory to raw for port %lu",
         memory.nPortIndex);
   }
-
+  this->drop_count = 0;
   GST_DEBUG_OBJECT (this, "Setting input port definition");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->sinkpad));
 
@@ -844,6 +844,16 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
         GST_DEBUG_PAD_NAME (srcpad));
     gst_omx_base_release_buffer (outbuf);
     return GST_FLOW_OK;
+  }
+
+  /* WARNING: Ugly hack follows */
+  /*  The deinterlacer has an issue where the first buffer is return without being correctly filled */
+  /*  we need to drop the first incoming buffer in order to keep our playback clean */
+
+  if (base->interlaced && (this->drop_count < 1)){
+    this->drop_count++;
+    gst_omx_base_release_buffer (outbuf);
+    return ret;
   }
 
   caps = gst_pad_get_negotiated_caps (srcpad);

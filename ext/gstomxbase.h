@@ -73,6 +73,12 @@ struct _GstOmxBase
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
+  
+  /*Conditions for Paused State*/
+  GMutex pausedwaitmutex;
+  GCond pausedwaitcond;
+  gboolean block_buffers;
+  gint prerolled_buffers;
 
   GstFlowReturn fill_ret;
 
