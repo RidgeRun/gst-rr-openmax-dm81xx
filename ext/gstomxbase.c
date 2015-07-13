@@ -663,6 +663,11 @@ nofreebuffer:
       buffers = g_list_next (buffers);
     }
     gst_buffer_unref (buf);
+
+    /*In case is needed, post a message to the bus to let the application know something went wrong with the shared memory */
+    gst_element_post_message (this,
+			      gst_message_new_application (GST_OBJECT (this),
+							   gst_structure_new ("no-free-buffer", NULL)));
     return GST_FLOW_WRONG_STATE;
   }
 noempty:
@@ -1529,7 +1534,12 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
       break;
     case OMX_EventError:
       GST_ERROR_OBJECT (this, "OMX error event received: %s",
-          gst_omx_error_to_str (nevent1));
+			gst_omx_error_to_str (nevent1));
+
+      /*Post a message to let the application know we had an error */
+      gst_element_post_message (this,
+				gst_message_new_application (GST_OBJECT (this),
+							   gst_structure_new ("omx-event-error", NULL)));
 
       /* GST_ELEMENT_ERROR (this, LIBRARY, ENCODE, */
       /*                 (gst_omx_error_to_str (nevent1)), (NULL)); */
