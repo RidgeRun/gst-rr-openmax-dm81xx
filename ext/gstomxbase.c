@@ -605,7 +605,7 @@ return before we check if the buffer is interlaced */
   this->prerolled_buffers++;
 
   g_mutex_lock (&this->pausedwaitmutex);
-    while (this->block_buffers && (this->prerolled_buffers >= this->input_buffers - 3 )) {
+    while (this->block_buffers && (this->prerolled_buffers <= this->input_buffers - 3)) {
     g_cond_wait(&this->pausedwaitcond, &this->pausedwaitmutex);
   }
   g_mutex_unlock (&this->pausedwaitmutex);
