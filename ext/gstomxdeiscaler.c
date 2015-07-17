@@ -850,7 +850,7 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
   /*  The deinterlacer has an issue where the first buffer is return without being correctly filled */
   /*  we need to drop the first incoming buffer in order to keep our playback clean */
 
-  if (base->interlaced && (this->drop_count < 1)){
+  if (base->interlaced && (this->drop_count < 2)){
     this->drop_count++;
     gst_omx_base_release_buffer (outbuf);
     return ret;
