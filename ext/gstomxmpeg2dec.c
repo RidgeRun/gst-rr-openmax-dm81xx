@@ -392,7 +392,7 @@ gst_omx_mpeg2_dec_init_pads (GstOmxBase * base)
 
   GST_DEBUG_OBJECT (this, "Initializing sink pad port");
   port = GST_OMX_PAD_PORT (GST_OMX_PAD (this->sinkpad));
-
+  base->wait_keyframe = TRUE;
   port->nPortIndex = 0;
   port->eDir = OMX_DirInput;
   /* It's recommended to use 4 input buffers */

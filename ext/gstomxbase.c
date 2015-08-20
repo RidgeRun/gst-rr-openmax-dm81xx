@@ -339,15 +339,14 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->joined_fields = TRUE;
   this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
   this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;
+  this->wait_keyframe = FALSE;
+  this->drop_frame = FALSE;
 
   this->pads = NULL;
   this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
   g_cond_init (&this->waitcond);
-  g_mutex_init (&this->pausedwaitmutex);
-  g_cond_init (&this->pausedwaitcond);
-  this->block_buffers =FALSE;
 
   this->num_buffers = 0;
   this->cont = 0;
@@ -472,6 +471,16 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     g_list_foreach (omxpad->buffers->table, gst_omx_base_mark_free,
         omxpad->buffers);
     this->first_buffer = FALSE;
+  }
+
+  if ( this->drop_frame) {
+    if (GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
+      GST_WARNING_OBJECT(this, "Waiting for keyframe, dropping frame %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
+      goto out;
+    } else {
+      this->drop_frame = FALSE;
+      GST_WARNING_OBJECT(this, "Firt keyframe found! %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
+    }
   }
 
   if (GST_OMX_IS_OMX_BUFFER (buf)) {
@@ -601,9 +610,9 @@ return before we check if the buffer is interlaced */
   /* g_mutex_lock (&this->waitmutex); */
   /* g_cond_wait (&this->waitcond, &this->waitmutex); */
   /* g_mutex_unlock (&this->waitmutex); */
+
+out:
   gst_buffer_unref (buf);
-
-
   return GST_FLOW_OK;
 
 flushing:
@@ -614,7 +623,7 @@ flushing:
   }
 pusherror:
   {
-    GST_LOG_OBJECT (this, "Dropping buffer, push error %s",
+    GST_DEBUG_OBJECT (this, "Dropping buffer, push error %s",
         gst_flow_get_name (this->fill_ret));
     gst_buffer_unref (buf);
     return this->fill_ret;
@@ -1041,7 +1050,7 @@ noflush:
   {
     GST_ERROR_OBJECT (this, "Unable to flush port: %s",
         gst_omx_error_to_str (error));
-    return error;
+    return ret;
   }
 }
 
@@ -1900,7 +1909,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (this, "handling event %p %" GST_PTR_FORMAT, event, event);
+  GST_DEBUG_OBJECT (this, "handling event %p %" GST_PTR_FORMAT " type: %s  ", event, event, GST_EVENT_TYPE_NAME(event));
 
   switch (GST_EVENT_TYPE (event)) {
       /* We only care for the EOS event, put the component in flush state so it doesn't 
@@ -1933,10 +1942,14 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     }
     case GST_EVENT_FLUSH_START:
     {
-      if (GST_STATE_PAUSED < GST_STATE (this)) {
+      GST_INFO_OBJECT (this, "Flush start received");
+      break;
+    }
+    case GST_EVENT_FLUSH_STOP:
+    {
+      if (GST_STATE_PAUSED <=  GST_STATE (this)) {
 
-	GST_INFO_OBJECT (this, "Flush start received, flushing ports");
-
+	GST_INFO_OBJECT (this, "Flush stop received, flushing ports");
 	GST_OBJECT_LOCK(this);
 	this->flushing = TRUE;
 	GST_OBJECT_UNLOCK (this);
@@ -1946,12 +1959,12 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 				       GST_PAD_UNKNOWN, NULL);
 	}
       }
-      break;
-    }
-    case GST_EVENT_FLUSH_STOP:
-    {
-      GST_INFO_OBJECT (this, "Flush stop received");
 
+
+      GST_INFO_OBJECT (this, "Flush stop received,Updating output flags");
+    if(this->wait_keyframe){
+		this->drop_frame = TRUE;
+      }
       GST_OBJECT_LOCK(this);
       this->fill_ret = GST_FLOW_OK;
       this->flushing = FALSE;

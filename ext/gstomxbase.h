@@ -70,17 +70,19 @@ struct _GstOmxBase
   gboolean joined_fields;
   gboolean audio_component;
 
+
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
   
   /*Conditions for Paused State*/
-  GMutex pausedwaitmutex;
+  GMutex pushwaitmutex;
   GCond pausedwaitcond;
-  gboolean block_buffers;
-  gint prerolled_buffers;
 
   GstFlowReturn fill_ret;
+
+  gboolean wait_keyframe;
+  gboolean drop_frame;
 
   GList *pads;
 };
