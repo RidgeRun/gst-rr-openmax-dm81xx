@@ -113,7 +113,8 @@ gst_omx_aac_dec_class_init (GstOmxAACDecClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_ALWAYS_COPY,
       g_param_spec_boolean ("always-copy", "Always Copy",
-          "Always copy the output buffer", GST_OMX_AAC_DEC_ALWAYS_COPY_DEFAULT, G_PARAM_READWRITE));
+          "Always copy the output buffer", GST_OMX_AAC_DEC_ALWAYS_COPY_DEFAULT,
+          G_PARAM_READWRITE));
 
 
   gstomxbase_class->omx_fill_buffer =
@@ -192,7 +193,7 @@ gst_omx_aac_dec_get_property (GObject * object, guint prop_id,
     case PROP_FRAMEMODE:
       g_value_set_boolean (value, this->framemode);
       break;
-   case PROP_ALWAYS_COPY:
+    case PROP_ALWAYS_COPY:
       g_value_set_boolean (value, this->always_copy);
       break;
     default:
@@ -531,11 +532,11 @@ gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
   if (!caps)
     goto nocaps;
 
-  if(!this->always_copy){
+  if (!this->always_copy) {
     buffer = gst_buffer_new ();
     if (!buffer)
       goto noalloc;
-    
+
     GST_BUFFER_SIZE (buffer) = outbuf->nFilledLen;
     GST_BUFFER_CAPS (buffer) = caps;
     GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
@@ -549,31 +550,30 @@ gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
     bufdata->buffer = buffer;
 
     GST_LOG_OBJECT (this,
-      "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
-      GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
-      GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
+        "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
+        GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
+        GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
 
     GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
-      outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
-  }
-  else{
+        outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
+  } else {
 
-    buffer =  gst_buffer_new_and_alloc(outbuf->nFilledLen);
+    buffer = gst_buffer_new_and_alloc (outbuf->nFilledLen);
     if (!buffer)
       goto noalloc;
-    gst_buffer_set_caps(buffer,caps);
-    memcpy(buffer->data,outbuf->pBuffer,outbuf->nFilledLen);
+    gst_buffer_set_caps (buffer, caps);
+    memcpy (buffer->data, outbuf->pBuffer, outbuf->nFilledLen);
     GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
     GST_BUFFER_DURATION (buffer) = 1e9 * 1 / this->format.rate;
     GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
     GST_LOG_OBJECT (this,
-      "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
-      GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
-      GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
+        "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
+        GST_OBJECT_NAME (this), outbuf->pBuffer, GST_BUFFER_SIZE (buffer),
+        GST_OBJECT_REFCOUNT (buffer), bufdata, bufdata->buffer);
 
     GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
-      outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
-    gst_omx_base_release_buffer(outbuf);
+        outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
+    gst_omx_base_release_buffer (outbuf);
   }
 
   ret = gst_pad_push (this->srcpad, buffer);

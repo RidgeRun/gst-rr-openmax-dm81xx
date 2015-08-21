@@ -324,7 +324,7 @@ gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
           &this->crop_area);
       break;
     case PROP_JOINED_FIELDS:
-      base->joined_fields = g_value_get_boolean(value);
+      base->joined_fields = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -338,7 +338,7 @@ gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
 {
   GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
   GstOmxBase *base = GST_OMX_BASE (this);
-  
+
   switch (prop_id) {
     case PROP_RATE_DIV:
       g_value_set_uint (value, this->framerate_divisor);
@@ -850,7 +850,7 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
   /*  The deinterlacer has an issue where the first buffer is return without being correctly filled */
   /*  we need to drop the first incoming buffer in order to keep our playback clean */
 
-  if (base->interlaced && (this->drop_count < 2)){
+  if (base->interlaced && (this->drop_count < 2)) {
     this->drop_count++;
     gst_omx_base_release_buffer (outbuf);
     return ret;

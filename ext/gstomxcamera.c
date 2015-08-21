@@ -367,22 +367,21 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   if (base->interlaced) {
     if (!this->field_merged) {
-		this->format.size_padded = gst_video_format_get_size (this->format.format,
-								  this->format.width_padded,
-								  (this->format.height_padded / 2));
-		this->format.size =
-			gst_video_format_get_size (this->format.format, this->format.width,
-			this->format.height / 2);
-	} else {
-		this->format.size_padded =
-			gst_video_format_get_size (this->format.format,
-			this->format.width_padded, this->format.height_padded);
-		this->format.size = gst_video_format_get_size (this->format.format,
-			this->format.width, this->format.height);
-	}
+      this->format.size_padded = gst_video_format_get_size (this->format.format,
+          this->format.width_padded, (this->format.height_padded / 2));
+      this->format.size =
+          gst_video_format_get_size (this->format.format, this->format.width,
+          this->format.height / 2);
+    } else {
+      this->format.size_padded =
+          gst_video_format_get_size (this->format.format,
+          this->format.width_padded, this->format.height_padded);
+      this->format.size = gst_video_format_get_size (this->format.format,
+          this->format.width, this->format.height);
+    }
   } else {
     this->format.size_padded =
-      gst_video_format_get_size (this->format.format,
+        gst_video_format_get_size (this->format.format,
         this->format.width_padded, this->format.height_padded);
     this->format.size = gst_video_format_get_size (this->format.format,
         this->format.width, this->format.height);
@@ -390,7 +389,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
-      "\tFormat  %"GST_FOURCC_FORMAT "\n"
+      "\tFormat  %" GST_FOURCC_FORMAT "\n"
       "\tFramerate: %u/%u",
       this->format.width,
       this->format.height,
@@ -414,7 +413,7 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   gst_structure_fixate_field_nearest_int (srcstructure, "height",
       this->format.height);
   gst_structure_set (srcstructure, "format", GST_TYPE_FOURCC,
-      gst_video_format_to_fourcc (this->format.format), (char*) NULL);
+      gst_video_format_to_fourcc (this->format.format), (char *) NULL);
 
   gst_structure_get_int (srcstructure, "width", &this->format.width);
   gst_structure_get_int (srcstructure, "height", &this->format.height);
@@ -479,7 +478,8 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
       g_return_if_fail (G_VALUE_TYPE (v) == GST_TYPE_LIST);
 
       fourcc = gst_value_get_fourcc (gst_value_list_get_value (v, 0));
-      gst_structure_set (structure, "format", GST_TYPE_FOURCC, fourcc, (char*)NULL);
+      gst_structure_set (structure, "format", GST_TYPE_FOURCC, fourcc,
+          (char *) NULL);
     }
   }
 

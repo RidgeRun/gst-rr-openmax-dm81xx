@@ -74,8 +74,8 @@ struct _GstOmxBase
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
-  
-  /*Conditions for Paused State*/
+
+  /*Conditions for Paused State */
   GMutex pushwaitmutex;
   GCond pausedwaitcond;
 
