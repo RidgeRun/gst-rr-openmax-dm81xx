@@ -74,6 +74,7 @@ gst_omx_pad_init (GstOmxPad * this)
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
 
   this->buffers = gst_omx_buf_tab_new ();
+  this->queue_buffers = gst_omx_buf_queue_new ();
 
   this->port = (OMX_PARAM_PORTDEFINITIONTYPE *)
       TIMM_OSAL_Malloc (sizeof (OMX_PARAM_PORTDEFINITIONTYPE), TIMM_OSAL_TRUE,

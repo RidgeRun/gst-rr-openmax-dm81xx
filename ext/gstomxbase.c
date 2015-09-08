@@ -143,6 +143,16 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE
 gst_omx_base_set_flushing_pad (GstOmxBase * this, GstOmxPad * pad,
     gpointer data);
+void gst_omx_base_push_task( void *data);
+static OMX_ERRORTYPE
+gst_omx_base_create_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE
+gst_omx_base_destroy_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE
+gst_omx_base_clear_queue_srcpad (GstOmxBase * this, GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE
+gst_omx_base_pause_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data);
+
 
 /* GObject vmethod implementations */
 
@@ -346,6 +356,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
+  g_mutex_init (&this->stream_mutex);
   g_cond_init (&this->waitcond);
 
   this->num_buffers = 0;
@@ -442,11 +453,14 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   flushing = this->flushing;
   GST_OBJECT_UNLOCK (this);
 
+  g_mutex_lock (&this->stream_mutex);
+
   if (flushing)
     goto flushing;
 
   if (this->fill_ret)
     goto pusherror;
+ g_mutex_unlock (&this->stream_mutex);
 
   if (!this->started) {
     if (GST_OMX_IS_OMX_BUFFER (buf)) {
@@ -479,7 +493,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
       goto out;
     } else {
       this->drop_frame = FALSE;
-      GST_WARNING_OBJECT(this, "Firt keyframe found! %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
+      GST_WARNING_OBJECT(this, "First keyframe found! %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
     }
   }
 
@@ -619,6 +633,7 @@ flushing:
   {
     GST_WARNING_OBJECT (this, "Discarding buffer while flushing");
     gst_buffer_unref (buf);
+  g_mutex_unlock (&this->stream_mutex);
     return GST_FLOW_WRONG_STATE;
   }
 pusherror:
@@ -626,6 +641,7 @@ pusherror:
     GST_DEBUG_OBJECT (this, "Dropping buffer, push error %s",
         gst_flow_get_name (this->fill_ret));
     gst_buffer_unref (buf);
+  g_mutex_unlock (&this->stream_mutex);
     return this->fill_ret;
   }
 nostart:
@@ -878,6 +894,17 @@ gst_omx_base_start (GstOmxBase * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
 
   this->started = TRUE;
 
+
+
+  GST_INFO_OBJECT (this, "Creating buffer push tasks");
+  error =
+      gst_omx_base_for_each_pad (this, gst_omx_base_create_srcpad_task,
+      GST_PAD_SRC, NULL);
+  if (GST_OMX_FAIL (error))
+    goto nopush;
+
+
+
   return error;
 
 alreadystarted:
@@ -938,6 +965,14 @@ gst_omx_base_stop (GstOmxBase * this)
       (gpointer) & this->state);
   if (GST_OMX_FAIL (error))
     goto statechange;
+
+
+  error =
+      gst_omx_base_for_each_pad (this,gst_omx_base_clear_queue_srcpad, GST_PAD_SRC,
+      NULL);
+  if (GST_OMX_FAIL (error))
+    goto noflush;
+
 
   GST_INFO_OBJECT (this, "Sending handle to Loaded");
   g_mutex_lock (&_omx_mutex);
@@ -1020,22 +1055,9 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
     return ret;
 
   switch (transition) {
-  case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-    if (!this->flushing) {
-		GST_OBJECT_LOCK (this);
-		this->flushing = TRUE;
-		GST_OBJECT_UNLOCK (this);
-		/* DSP does not support flush ports */
-		if (!(this->audio_component)) {
-		  GST_INFO_OBJECT (this, "Flushing ports");
-		  error =
-			  gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
-			  GST_PAD_UNKNOWN, NULL);
-		  if (GST_OMX_FAIL (error))
-			goto noflush;
-		}
-	}
-    break;
+  case GST_STATE_CHANGE_PAUSED_TO_READY:
+    gst_omx_base_for_each_pad (this, gst_omx_base_destroy_srcpad_task,
+			       GST_PAD_SRC, NULL);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
     gst_omx_base_stop (this);
@@ -1446,11 +1468,8 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   pad->flushing = TRUE;
   GST_OBJECT_UNLOCK (pad);
 
-  if (GST_PAD_IS_SRC (pad))
-    return error;
-
   g_mutex_lock (&_omx_mutex);
-  error = OMX_SendCommand (this->handle, OMX_CommandFlush, -1, NULL);
+  error = OMX_SendCommand (this->handle, OMX_CommandFlush, port->nPortIndex, NULL);
   g_mutex_unlock (&_omx_mutex);
 
   GST_DEBUG_OBJECT (this, "Waiting for port to flush");
@@ -1458,6 +1477,21 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
       gst_omx_base_condition_disabled, (gpointer) & pad->flushing, NULL);
   if (GST_OMX_FAIL (error))
     goto noflush;
+
+  if (GST_PAD_IS_SRC (pad)){
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (pad->queue_buffers);
+    while (omx_buf){
+      g_mutex_lock (&_omx_mutex);
+      error = gst_omx_buf_tab_return_buffer (pad->buffers, omx_buf);
+      error = this->component->FillThisBuffer (this->handle, omx_buf);
+      g_mutex_unlock (&_omx_mutex);
+      omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (pad->queue_buffers);
+    }
+  GST_INFO_OBJECT (this, " Queue on port %d of pad %s:%s empty", (int) port->nPortIndex, GST_DEBUG_PAD_NAME (pad));
+
+  
+  }
 
   return error;
 
@@ -1594,39 +1628,23 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
   OMX_ERRORTYPE error = OMX_ErrorNone;
   gboolean flushing;
+  GstOmxPad *srcpad = GST_OMX_PAD (bufdata->pad);
 
   GST_LOG_OBJECT (this, "Fill buffer callback for buffer %p->%p", outbuf,
       outbuf->pBuffer);
 
-  GST_OBJECT_LOCK (this);
-  flushing = this->flushing;
-  GST_OBJECT_UNLOCK (this);
 
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
 
   if (busy)
     goto illegal;
 
-  if (flushing)
-    goto drop;
 
-  if (this->fill_ret != GST_FLOW_OK)
-    goto drop;
 
-  GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
-      GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
-      GST_STATE_NEXT (this));
-  if (GST_STATE_PAUSED > GST_STATE (this))
-    goto closing;
+  gst_omx_buf_tab_use_buffer (srcpad->buffers, outbuf);
 
-  gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
+  error = gst_omx_buf_queue_push_buffer (srcpad->queue_buffers, outbuf);
 
-  if (klass->omx_fill_buffer) {
-    this->fill_ret = klass->omx_fill_buffer (this, outbuf);
-    if (this->fill_ret != GST_FLOW_OK) {
-      goto cbfailed;
-    }
-  }
 
   /* In some cases the EoS event arrives before we encode the
   *  desired amount of frames using the num_buffers property we
@@ -1653,26 +1671,6 @@ illegal:
     return error;
   }
 
-closing:
-  {
-    GST_INFO_OBJECT (this, "Discarding buffer %d while closing", bufdata->id);
-    return error;
-  }
-
-cbfailed:
-  {
-    GST_WARNING_OBJECT (this,"Subclass failed to process buffer (id:%d): %s",
-            bufdata->id, gst_flow_get_name (this->fill_ret));
-    return error;
-  }
-drop:
-  {
-    GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
-    g_mutex_lock (&_omx_mutex);
-    error = this->component->FillThisBuffer (this->handle, outbuf);
-    g_mutex_unlock (&_omx_mutex);
-    return error;
-  }
 }
 
 static OMX_ERRORTYPE
@@ -1943,6 +1941,9 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_START:
     {
       GST_INFO_OBJECT (this, "Flush start received");
+      error =
+	gst_omx_base_for_each_pad (this,gst_omx_base_pause_srcpad_task, GST_PAD_SRC,
+	NULL);
       break;
     }
     case GST_EVENT_FLUSH_STOP:
@@ -1969,6 +1970,17 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
       this->fill_ret = GST_FLOW_OK;
       this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
+
+
+
+      error =
+	gst_omx_base_for_each_pad (this,gst_omx_base_clear_queue_srcpad, GST_PAD_SRC,
+				   NULL);
+ 
+      GST_INFO_OBJECT (this, "Creating sinkpads tasks");
+      error =
+	gst_omx_base_for_each_pad (this, gst_omx_base_create_srcpad_task,
+				   GST_PAD_SRC, NULL);
       break;
     }
     default:
@@ -1983,4 +1995,153 @@ noflush_eos:
   GST_ERROR_OBJECT (this, "Unable to flush component after EOS: %s ",
       gst_omx_error_to_str (error));
   return FALSE;
+}
+
+
+void gst_omx_base_push_task( void *data)
+{
+
+
+  GstOmxPad *srcpad = GST_OMX_PAD (data);
+  GstOmxBase * this = GST_OBJECT_PARENT (GST_OBJECT(srcpad));
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
+  GstOmxBufferData *bufdata = NULL;
+  gboolean flushing;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_OBJECT_LOCK (this);
+  flushing = this->flushing;
+  GST_OBJECT_UNLOCK (this);
+
+  if (flushing)
+    {
+      omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (srcpad->queue_buffers);
+      goto drop;
+    }
+
+  if (this->fill_ret != GST_FLOW_OK)
+    goto drop;
+
+
+
+  omx_buf = gst_omx_buf_queue_pop_buffer_check_release (srcpad->queue_buffers);
+
+  if (!omx_buf) {
+    goto timeout;
+  }
+
+  bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
+
+
+
+
+  if (klass->omx_fill_buffer) {
+    this->fill_ret = klass->omx_fill_buffer (this, omx_buf);
+    if (this->fill_ret != GST_FLOW_OK) {
+      goto cbfailed;
+    }
+  }
+  return;
+
+
+
+cbfailed:
+  {
+    GST_WARNING_OBJECT (this,"Subclass failed to process buffer (id:%d): %s",
+            bufdata->id, gst_flow_get_name (this->fill_ret));
+    return;
+  }
+  
+timeout:
+  {
+    GST_ELEMENT_ERROR (this, LIBRARY, SETTINGS, (NULL),
+        ("Cannot acquire output buffer from pending queue"));
+    return;
+  }
+
+
+drop:
+  {
+    if(omx_buf){
+      GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
+      g_mutex_lock (&_omx_mutex);
+      error = gst_omx_buf_tab_return_buffer (srcpad->buffers, omx_buf);
+      error = this->component->FillThisBuffer (this->handle, omx_buf);
+      g_mutex_unlock (&_omx_mutex);
+    }
+    else{
+      GST_INFO_OBJECT (this, "Queue empty : %s",gst_flow_get_name (this->fill_ret));
+    }
+    gst_pad_pause_task(srcpad);
+    return ;
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_base_pause_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (pad, "Pausing task on srcpad...");
+
+  if(!gst_pad_pause_task(GST_PAD(pad)))
+      GST_WARNING_OBJECT (this,"Failed pause task on pad");
+
+  GST_INFO_OBJECT (pad, "Task on srcpad Paused");
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_create_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (pad, "Starting task on srcpad...");
+
+  if( !gst_pad_start_task(GST_PAD(pad),gst_omx_base_push_task, (gpointer) pad))
+      GST_WARNING_OBJECT (this,"Failed start task on pad");
+
+  GST_INFO_OBJECT (pad, "Task on srcpad started");
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_destroy_srcpad_task (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (pad, "Stopping task on srcpad...");
+  
+  gst_omx_buf_queue_release (pad->queue_buffers);
+
+  if( !gst_pad_stop_task(GST_PAD(pad)))
+      GST_WARNING_OBJECT (this,"Failed stop task on pad");
+
+  GST_INFO_OBJECT (pad, "Finished task on srcpad");
+
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_base_clear_queue_srcpad (GstOmxBase * this, GstOmxPad * pad, gpointer data){
+
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_PARAM_PORTDEFINITIONTYPE *port = GST_OMX_PAD_PORT (pad);
+  GstOmxBufferData *bufdata = NULL;
+
+  omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (pad->queue_buffers);
+  while (omx_buf){
+    bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
+    GST_LOG_OBJECT (this, "Dropping buffer %d %p %p->%p", bufdata->id, bufdata,
+      omx_buf, omx_buf->pBuffer);
+    g_mutex_lock (&_omx_mutex);
+    error = gst_omx_buf_tab_return_buffer (pad->buffers, omx_buf);
+    g_mutex_unlock (&_omx_mutex);
+    omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (pad->queue_buffers);
+  }
+  GST_INFO_OBJECT (this, " Queue on port %d of pad %s:%s empty", (int) port->nPortIndex, GST_DEBUG_PAD_NAME (pad));
+  return error;
 }

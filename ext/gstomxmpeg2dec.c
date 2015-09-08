@@ -502,7 +502,13 @@ gst_omx_mpeg2_dec_fill_callback (GstOmxBase * base,
 
   GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
       outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
+  
+  g_mutex_lock (&base->stream_mutex);
   ret = gst_pad_push (this->srcpad, buffer);
+  g_mutex_unlock (&base->stream_mutex);  
+
+    GST_LOG_OBJECT (this, " Buffer %p->%p  pushed",
+      outbuf, outbuf->pBuffer)
   if (GST_FLOW_OK != ret)
     goto nopush;
 
