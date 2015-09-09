@@ -24,7 +24,7 @@
 
 #include <gst/gst.h>
 #include "gstomxpad.h"
-#include "gstomxbase.h"
+#include "gstomxbasedecoder.h"
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_MPEG2_DEC \
@@ -42,7 +42,7 @@ typedef struct _GstOmxMpeg2DecClass GstOmxMpeg2DecClass;
 
 struct _GstOmxMpeg2Dec
 {
-  GstOmxBase element;
+  GstOmxBaseDecoder element;
 
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
@@ -50,7 +50,7 @@ struct _GstOmxMpeg2Dec
 
 struct _GstOmxMpeg2DecClass
 {
-  GstOmxBaseClass parent_class;
+  GstOmxBaseDecoderClass parent_class;
 };
 
 GType gst_omx_mpeg2_dec_get_type (void);

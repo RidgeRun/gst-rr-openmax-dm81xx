@@ -5,6 +5,7 @@ libgstrromx_la_SOURCES = \
 	gstomx.c gstomx.h \
 	gstomxpad.c gstomxpad.h \
 	gstomxbase.c gstomxbase.h \
+	gstomxbasedecoder.c gstomxbasedecoder.h\
 	gstomxerror.c gstomxerror.h \
 	gstomxbufferalloc.c gstomxbufferalloc.h \
 	gstomxmpeg2dec.c gstomxmpeg2dec.h \
@@ -36,6 +37,7 @@ noinst_HEADERS = \
 	gstomxerror.h \
 	gstomxpad.h \
 	gstomxbase.h \
+	gstomxbasedecoder.h \
 	gstomxbufferalloc.h \
 	gstomxmpeg2dec.h \
 	gstomxh264dec.h \

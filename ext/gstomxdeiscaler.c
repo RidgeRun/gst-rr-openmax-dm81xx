@@ -878,13 +878,7 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
   GST_LOG_OBJECT (this, "Pushing buffer to %s:%s", GST_DEBUG_PAD_NAME (srcpad));
   GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
 
-  g_mutex_lock (&base->stream_mutex);
-
   ret = gst_pad_push (srcpad, buffer);
-
-  g_mutex_unlock (&base->stream_mutex);
-  GST_LOG_OBJECT (this, " Buffer %p->%p  pushed",
-      outbuf, outbuf->pBuffer)
   if (GST_FLOW_OK != ret)
     goto nopush;
 

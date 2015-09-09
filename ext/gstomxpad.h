@@ -23,7 +23,6 @@
 #include <gst/gst.h>
 //#include "gstomx.h"
 #include "gstomxbuftab.h"
-#include "gstomxbufqueue.h"
 
 G_BEGIN_DECLS
 #define TYPE_GST_OMX_PAD (gst_omx_pad_get_type ())
@@ -41,8 +40,6 @@ struct _GstOmxPad
 
   OMX_PARAM_PORTDEFINITIONTYPE *port;
   GstOmxBufTab *buffers;
-  GstOmxBufQueue *queue_buffers;
-
   gboolean enabled;
   gboolean flushing;
 };

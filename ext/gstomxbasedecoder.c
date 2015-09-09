@@ -22,14 +22,14 @@
  */
 
 /**
- * SECTION:element-omx_base
+ * SECTION:element-omx_basedecoder
  *
- * FIXME:Describe omx_base here.
+ * FIXME:Describe omx_basedecoder here.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m fakesrc ! omx_base ! fakesink silent=TRUE
+ * gst-launch -v -m fakesrc ! omx_basedecoder ! fakesink silent=TRUE
  * ]|
  * </refsect2>
  */
@@ -44,10 +44,10 @@
 
 #include "timm_osal_interfaces.h"
 
-#include "gstomxbase.h"
+#include "gstomxbasedecoder.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_omx_base_debug);
-#define GST_CAT_DEFAULT gst_omx_base_debug
+GST_DEBUG_CATEGORY_STATIC (gst_omx_basedecoder_debug);
+#define GST_CAT_DEFAULT gst_omx_basedecoder_debug
 
 /* Filter signals and args */
 enum
@@ -65,97 +65,112 @@ enum
   PROP_NUM_BUFFERS
 };
 
-#define GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT    8
-#define GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT   8
-#define GST_OMX_BASE_NUM_BUFFERS_DEFAULT   	      0
+#define GST_OMX_BASEDECODER_NUM_INPUT_BUFFERS_DEFAULT    8
+#define GST_OMX_BASEDECODER_NUM_OUTPUT_BUFFERS_DEFAULT   8
+#define GST_OMX_BASEDECODER_NUM_BUFFERS_DEFAULT   	      0
 
-#define gst_omx_base_parent_class parent_class
+#define gst_omx_basedecoder_parent_class parent_class
 static GstElementClass *parent_class = NULL;
-static gint gst_omx_base_bottom_flag = 0;
+static gint gst_omx_basedecoder_bottom_flag = 0;
 
-static void gst_omx_base_base_init (gpointer g_class);
-static void gst_omx_base_class_init (GstOmxBaseClass * klass);
-static void gst_omx_base_init (GstOmxBase * src, gpointer g_class);
+static void gst_omx_basedecoder_base_init (gpointer g_class);
+static void gst_omx_basedecoder_class_init (GstOmxBaseDecoderClass * klass);
+static void gst_omx_basedecoder_init (GstOmxBaseDecoder * src, gpointer g_class);
 
 GType
-gst_omx_base_get_type (void)
+gst_omx_basedecoder_get_type (void)
 {
-  static volatile gsize omx_base_type = 0;
+  static volatile gsize omx_basedecoder_type = 0;
 
-  if (g_once_init_enter (&omx_base_type)) {
+  if (g_once_init_enter (&omx_basedecoder_type)) {
     GType _type;
-    static const GTypeInfo omx_base_info = {
-      sizeof (GstOmxBaseClass),
-      (GBaseInitFunc) gst_omx_base_base_init,
+    static const GTypeInfo omx_basedecoder_info = {
+      sizeof (GstOmxBaseDecoderClass),
+      (GBaseInitFunc) gst_omx_basedecoder_base_init,
       NULL,
-      (GClassInitFunc) gst_omx_base_class_init,
+      (GClassInitFunc) gst_omx_basedecoder_class_init,
       NULL,
       NULL,
-      sizeof (GstOmxBase),
+      sizeof (GstOmxBaseDecoder),
       0,
-      (GInstanceInitFunc) gst_omx_base_init,
+      (GInstanceInitFunc) gst_omx_basedecoder_init,
     };
 
     _type = g_type_register_static (GST_TYPE_ELEMENT,
-        "GstOmxBase", &omx_base_info, G_TYPE_FLAG_ABSTRACT);
-    g_once_init_leave (&omx_base_type, _type);
+        "GstOmxBaseDecoder", &omx_basedecoder_info, G_TYPE_FLAG_ABSTRACT);
+    g_once_init_leave (&omx_basedecoder_type, _type);
   }
 
-  return omx_base_type;
+  return omx_basedecoder_type;
 }
 
-static void gst_omx_base_set_property (GObject * object, guint prop_id,
+static void gst_omx_basedecoder_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
-static void gst_omx_base_get_property (GObject * object, guint prop_id,
+static void gst_omx_basedecoder_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-static void gst_omx_base_finalize (GObject * object);
-static OMX_ERRORTYPE gst_omx_base_allocate_omx (GstOmxBase * this,
+static void gst_omx_basedecoder_finalize (GObject * object);
+static OMX_ERRORTYPE gst_omx_basedecoder_allocate_omx (GstOmxBaseDecoder * this,
     gchar * handle_name);
-static OMX_ERRORTYPE gst_omx_base_free_omx (GstOmxBase * this);
-static OMX_ERRORTYPE gst_omx_base_start (GstOmxBase * this,
+static OMX_ERRORTYPE gst_omx_basedecoder_free_omx (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE gst_omx_basedecoder_start (GstOmxBaseDecoder * this,
     OMX_BUFFERHEADERTYPE * omxpeerbuf);
-static OMX_ERRORTYPE gst_omx_base_stop (GstOmxBase * this);
-static OMX_ERRORTYPE gst_omx_base_alloc_buffers (GstOmxBase * this,
+static OMX_ERRORTYPE gst_omx_basedecoder_stop (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE gst_omx_basedecoder_alloc_buffers (GstOmxBaseDecoder * this,
     GstOmxPad * pad, gpointer data);
-static OMX_ERRORTYPE gst_omx_base_free_buffers (GstOmxBase * this,
+static OMX_ERRORTYPE gst_omx_basedecoder_free_buffers (GstOmxBaseDecoder * this,
     GstOmxPad * pad, gpointer data);
-static OMX_ERRORTYPE gst_omx_base_for_each_pad (GstOmxBase * this,
-    GstOmxBasePadFunc func, GstPadDirection direction, gpointer data);
-static OMX_ERRORTYPE gst_omx_base_event_callback (OMX_HANDLETYPE handle,
+static OMX_ERRORTYPE gst_omx_basedecoder_for_each_pad (GstOmxBaseDecoder * this,
+    GstOmxBaseDecoderPadFunc func, GstPadDirection direction, gpointer data);
+static OMX_ERRORTYPE gst_omx_basedecoder_event_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_EVENTTYPE event, guint32 nevent1, guint32 nevent2,
     gpointer eventdata);
-static OMX_ERRORTYPE gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
+static OMX_ERRORTYPE gst_omx_basedecoder_fill_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * buffer);
-static OMX_ERRORTYPE gst_omx_base_empty_callback (OMX_HANDLETYPE handle,
+static OMX_ERRORTYPE gst_omx_basedecoder_empty_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * buffer);
-static OMX_ERRORTYPE gst_omx_base_push_buffers (GstOmxBase * this,
+static OMX_ERRORTYPE gst_omx_basedecoder_push_buffers (GstOmxBaseDecoder * this,
     GstOmxPad * pad, gpointer data);
-static GstStateChangeReturn gst_omx_base_change_state (GstElement * element,
+static GstStateChangeReturn gst_omx_basedecoder_change_state (GstElement * element,
     GstStateChange transition);
-static GstFlowReturn gst_omx_base_chain (GstPad * pad, GstBuffer * buf);
-static gboolean gst_omx_base_event_handler (GstPad * pad, GstEvent * event);
-static gboolean gst_omx_base_set_caps (GstPad * pad, GstCaps * caps);
+static GstFlowReturn gst_omx_basedecoder_chain (GstPad * pad, GstBuffer * buf);
+static gboolean gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event);
+static gboolean gst_omx_basedecoder_set_caps (GstPad * pad, GstCaps * caps);
 
-static gboolean gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
+static gboolean gst_omx_basedecoder_alloc_buffer (GstPad * pad, guint64 offset,
     guint size, GstCaps * caps, GstBuffer ** buffer);
 static OMX_ERRORTYPE
-gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data);
+gst_omx_basedecoder_flush_ports (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE
-gst_omx_base_set_flushing_pad (GstOmxBase * this, GstOmxPad * pad,
+gst_omx_basedecoder_set_flushing_pad (GstOmxBaseDecoder * this, GstOmxPad * pad,
     gpointer data);
+void gst_omx_basedecoder_push_task( void *data);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_create_push_task (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_pause_push_task (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_start_push_task (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_stop_push_task (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_destroy_push_task (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_clear_queue (GstOmxBaseDecoder * this);
+static OMX_ERRORTYPE
+gst_omx_basedecoder_clear_queue_fill (GstOmxBaseDecoder * this);
 
 /* GObject vmethod implementations */
 
 static void
-gst_omx_base_base_init (gpointer g_class)
+gst_omx_basedecoder_base_init (gpointer g_class)
 {
-  GST_DEBUG_CATEGORY_INIT (gst_omx_base_debug, "omx_base",
+  GST_DEBUG_CATEGORY_INIT (gst_omx_basedecoder_debug, "omx_base",
       0, "RidgeRun's OMX base element");
 }
 
 /* initialize the omx's class */
 static void
-gst_omx_base_class_init (GstOmxBaseClass * klass)
+gst_omx_basedecoder_class_init (GstOmxBaseDecoderClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
@@ -175,18 +190,18 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
   gstelement_class = (GstElementClass *) klass;
 
   gstelement_class->change_state =
-      GST_DEBUG_FUNCPTR (gst_omx_base_change_state);
+      GST_DEBUG_FUNCPTR (gst_omx_basedecoder_change_state);
 
   gst_element_class_set_details_simple (gstelement_class,
       "omxdec",
       "Generic/Filter",
-      "RidgeRun's OMX based base",
+      "RidgeRun's OMX based basedecoder",
       "Michael Gruner <michael.gruner@ridgerun.com>, "
       "Jose Jimenez <jose.jimenez@ridgerun.com>");
 
-  gobject_class->set_property = gst_omx_base_set_property;
-  gobject_class->get_property = gst_omx_base_get_property;
-  gobject_class->finalize = gst_omx_base_finalize;
+  gobject_class->set_property = gst_omx_basedecoder_set_property;
+  gobject_class->get_property = gst_omx_basedecoder_get_property;
+  gobject_class->finalize = gst_omx_basedecoder_finalize;
 
   g_object_class_install_property (gobject_class, PROP_PEER_ALLOC,
       g_param_spec_boolean ("peer-alloc",
@@ -197,20 +212,20 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
   g_object_class_install_property (gobject_class, PROP_NUM_INPUT_BUFFERS,
       g_param_spec_uint ("input-buffers", "Input buffers",
           "OMX input buffers number",
-          1, 10, GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 10, GST_OMX_BASEDECODER_NUM_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_NUM_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "OMX output buffers number",
-          1, 16, GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 16, GST_OMX_BASEDECODER_NUM_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_NUM_BUFFERS,
       g_param_spec_int ("num-buffers", "Number of buffers",
           "The number of Buffers to be processed (0 : process all buffers)",
-          0, G_MAXINT, GST_OMX_BASE_NUM_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          0, G_MAXINT, GST_OMX_BASEDECODER_NUM_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
+gst_omx_basedecoder_allocate_omx (GstOmxBaseDecoder * this, gchar * handle_name)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_PORT_PARAM_TYPE init;
@@ -225,11 +240,11 @@ gst_omx_base_allocate_omx (GstOmxBase * this, gchar * handle_name)
   }
 
   this->callbacks->EventHandler =
-      (GstOmxEventHandler) gst_omx_base_event_callback;
+      (GstOmxEventHandler) gst_omx_basedecoder_event_callback;
   this->callbacks->EmptyBufferDone =
-      (GstOmxEmptyBufferDone) gst_omx_base_empty_callback;
+      (GstOmxEmptyBufferDone) gst_omx_basedecoder_empty_callback;
   this->callbacks->FillBufferDone =
-      (GstOmxFillBufferDone) gst_omx_base_fill_callback;
+      (GstOmxFillBufferDone) gst_omx_basedecoder_fill_callback;
 
   if (!handle_name) {
     error = OMX_ErrorInvalidComponentName;
@@ -294,7 +309,7 @@ initport:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_free_omx (GstOmxBase * this)
+gst_omx_basedecoder_free_omx (GstOmxBaseDecoder * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
@@ -322,9 +337,9 @@ freehandle:
  * initialize instance structure
  */
 static void
-gst_omx_base_init (GstOmxBase * this, gpointer g_class)
+gst_omx_basedecoder_init (GstOmxBaseDecoder * this, gpointer g_class)
 {
-  GstOmxBaseClass *klass = GST_OMX_BASE_CLASS (g_class);
+  GstOmxBaseDecoderClass *klass = GST_OMX_BASEDECODER_CLASS (g_class);
   OMX_ERRORTYPE error;
 
   GST_INFO_OBJECT (this, "Initializing %s", GST_OBJECT_NAME (this));
@@ -337,8 +352,8 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->first_buffer = TRUE;
   this->interlaced = FALSE;
   this->joined_fields = TRUE;
-  this->input_buffers = GST_OMX_BASE_NUM_INPUT_BUFFERS_DEFAULT;
-  this->output_buffers = GST_OMX_BASE_NUM_OUTPUT_BUFFERS_DEFAULT;
+  this->input_buffers = GST_OMX_BASEDECODER_NUM_INPUT_BUFFERS_DEFAULT;
+  this->output_buffers = GST_OMX_BASEDECODER_NUM_OUTPUT_BUFFERS_DEFAULT;
   this->wait_keyframe = FALSE;
   this->drop_frame = FALSE;
 
@@ -346,13 +361,25 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
+  g_mutex_init (&this->stream_mutex);
   g_cond_init (&this->waitcond);
+
+  this->queue_buffers = gst_omx_buf_queue_new ();
 
   this->num_buffers = 0;
   this->cont = 0;
   this->num_buffers_mutex = g_mutex_new();
   this->num_buffers_cond  = g_cond_new();
-  error = gst_omx_base_allocate_omx (this, klass->handle_name);
+
+  GST_INFO_OBJECT (this, "Initializing buffer push task");
+  error = gst_omx_basedecoder_create_push_task(this);
+  
+  if (GST_OMX_FAIL (error)) {
+    GST_ELEMENT_ERROR (this, LIBRARY,
+		       INIT, (gst_omx_error_to_str (error)), (NULL));
+  }
+
+  error = gst_omx_basedecoder_allocate_omx (this, klass->handle_name);
   if (GST_OMX_FAIL (error)) {
     GST_ELEMENT_ERROR (this, LIBRARY,
         INIT, (gst_omx_error_to_str (error)), (NULL));
@@ -360,10 +387,10 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
 }
 
 static void
-gst_omx_base_set_property (GObject * object, guint prop_id,
+gst_omx_basedecoder_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstOmxBase *this = GST_OMX_BASE (object);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (object);
 
   switch (prop_id) {
     case PROP_PEER_ALLOC:
@@ -392,10 +419,10 @@ gst_omx_base_set_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_omx_base_get_property (GObject * object, guint prop_id,
+gst_omx_basedecoder_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstOmxBase *this = GST_OMX_BASE (object);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (object);
 
   switch (prop_id) {
     case PROP_PEER_ALLOC:
@@ -417,7 +444,7 @@ gst_omx_base_get_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_omx_base_mark_free (gpointer data, gpointer user_data)
+gst_omx_basedecoder_mark_free (gpointer data, gpointer user_data)
 {
   GstOmxBufTab *buftab = (GstOmxBufTab *) user_data;
   GstOmxBufTabNode *node = (GstOmxBufTabNode *) data;
@@ -427,9 +454,9 @@ gst_omx_base_mark_free (gpointer data, gpointer user_data)
 }
 
 static GstFlowReturn
-gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
+gst_omx_basedecoder_chain (GstPad * pad, GstBuffer * buf)
 {
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *omxbuf;
   gboolean busy;
@@ -442,11 +469,14 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   flushing = this->flushing;
   GST_OBJECT_UNLOCK (this);
 
+  g_mutex_lock (&this->stream_mutex);
+
   if (flushing)
     goto flushing;
 
   if (this->fill_ret)
     goto pusherror;
+ g_mutex_unlock (&this->stream_mutex);
 
   if (!this->started) {
     if (GST_OMX_IS_OMX_BUFFER (buf)) {
@@ -459,7 +489,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
     }
 
     GST_INFO_OBJECT (this, "Starting component");
-    error = gst_omx_base_start (this, omxpeerbuf);
+    error = gst_omx_basedecoder_start (this, omxpeerbuf);
     if (GST_OMX_FAIL (error))
       goto nostart;
   }
@@ -468,7 +498,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
      marked as busy even though no buffers have been processed yet. This
      is the time to mark them as free and start the steady state */
   if (this->first_buffer) {
-    g_list_foreach (omxpad->buffers->table, gst_omx_base_mark_free,
+    g_list_foreach (omxpad->buffers->table, gst_omx_basedecoder_mark_free,
         omxpad->buffers);
     this->first_buffer = FALSE;
   }
@@ -479,7 +509,7 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
       goto out;
     } else {
       this->drop_frame = FALSE;
-      GST_WARNING_OBJECT(this, "Firt keyframe found! %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
+      GST_WARNING_OBJECT(this, "First keyframe found! %" GST_TIME_FORMAT, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buf)));
     }
   }
 
@@ -540,8 +570,8 @@ return before we check if the buffer is interlaced */
   if (this->interlaced && !this->joined_fields) {
     GST_LOG_OBJECT (this, "Sending bottom/top field buffer flag");
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
-      gst_omx_base_bottom_flag ?  OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE_BOTTOM : 0;
-    gst_omx_base_bottom_flag = !gst_omx_base_bottom_flag;
+      gst_omx_basedecoder_bottom_flag ?  OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE_BOTTOM : 0;
+    gst_omx_basedecoder_bottom_flag = !gst_omx_basedecoder_bottom_flag;
   }
   
   else
@@ -619,6 +649,7 @@ flushing:
   {
     GST_WARNING_OBJECT (this, "Discarding buffer while flushing");
     gst_buffer_unref (buf);
+  g_mutex_unlock (&this->stream_mutex);
     return GST_FLOW_WRONG_STATE;
   }
 pusherror:
@@ -626,6 +657,7 @@ pusherror:
     GST_DEBUG_OBJECT (this, "Dropping buffer, push error %s",
         gst_flow_get_name (this->fill_ret));
     gst_buffer_unref (buf);
+  g_mutex_unlock (&this->stream_mutex);
     return this->fill_ret;
   }
 nostart:
@@ -683,23 +715,26 @@ noempty:
 }
 
 static void
-gst_omx_base_finalize (GObject * object)
+gst_omx_basedecoder_finalize (GObject * object)
 {
-  GstOmxBase *this = GST_OMX_BASE (object);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (object);
 
   GST_INFO_OBJECT (this, "Finalizing %s", GST_OBJECT_NAME (this));
 
   g_list_free_full (this->pads, gst_object_unref);
-  gst_omx_base_free_omx (this);
+  gst_omx_basedecoder_free_omx (this);
+
+  /*TODO: Check for errors*/
+  gst_omx_buf_queue_release(this->queue_buffers);
 
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static gboolean
-gst_omx_base_check_caps (GstPad * pad, GstCaps * newcaps)
+gst_omx_basedecoder_check_caps (GstPad * pad, GstCaps * newcaps)
 {
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
   GstCaps *caps = NULL;
   GstStructure *structure = NULL;
   GstStructure *newstructure = NULL;
@@ -745,10 +780,10 @@ notinitializeports:
 
 /* vmethod implementations */
 static gboolean
-gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
+gst_omx_basedecoder_set_caps (GstPad * pad, GstCaps * caps)
 {
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
-  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoderClass *klass = GST_OMX_BASEDECODER_GET_CLASS (this);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (!klass->parse_caps)
@@ -757,14 +792,14 @@ gst_omx_base_set_caps (GstPad * pad, GstCaps * caps)
   if (!klass->parse_caps (pad, caps))
     goto capsinvalid;
 
-  if (!gst_omx_base_check_caps (pad, caps))
+  if (!gst_omx_basedecoder_check_caps (pad, caps))
     goto noresolutionchange;
 
   GST_INFO_OBJECT (this, "%s:%s resolution changed, calling port renegotiation",
       GST_DEBUG_PAD_NAME (pad));
   if (OMX_StateLoaded < this->state) {
     GST_INFO_OBJECT (this, "Resetting component");
-    error = gst_omx_base_stop (this);
+    error = gst_omx_basedecoder_stop (this);
     if (GST_OMX_FAIL (error))
       goto nostartstop;
   }
@@ -818,7 +853,7 @@ noinitports:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_start (GstOmxBase * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
+gst_omx_basedecoder_start (GstOmxBaseDecoder * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
@@ -835,21 +870,21 @@ gst_omx_base_start (GstOmxBase * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
 
   GST_INFO_OBJECT (this, "Allocating buffers for src ports");
   error =
-      gst_omx_base_for_each_pad (this, gst_omx_base_alloc_buffers, GST_PAD_SRC,
+      gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_alloc_buffers, GST_PAD_SRC,
       NULL);
   if (GST_OMX_FAIL (error))
     goto noalloc;
 
   GST_INFO_OBJECT (this, "Allocating buffers for sink ports");
   error =
-      gst_omx_base_for_each_pad (this, gst_omx_base_alloc_buffers, GST_PAD_SINK,
+      gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_alloc_buffers, GST_PAD_SINK,
       omxpeerbuf);
   if (GST_OMX_FAIL (error))
     goto noalloc;
 
   GST_INFO_OBJECT (this, "Waiting for handle to become Idle");
-  error = gst_omx_base_wait_for_condition (this,
-      gst_omx_base_condition_state, (gpointer) OMX_StateIdle,
+  error = gst_omx_basedecoder_wait_for_condition (this,
+      gst_omx_basedecoder_condition_state, (gpointer) OMX_StateIdle,
       (gpointer) & this->state);
   if (GST_OMX_FAIL (error))
     goto starthandle;
@@ -863,20 +898,24 @@ gst_omx_base_start (GstOmxBase * this, OMX_BUFFERHEADERTYPE * omxpeerbuf)
     goto starthandle;
 
   GST_INFO_OBJECT (this, "Waiting for handle to become Executing");
-  error = gst_omx_base_wait_for_condition (this,
-      gst_omx_base_condition_state, (gpointer) OMX_StateExecuting,
+  error = gst_omx_basedecoder_wait_for_condition (this,
+      gst_omx_basedecoder_condition_state, (gpointer) OMX_StateExecuting,
       (gpointer) & this->state);
   if (GST_OMX_FAIL (error))
     goto starthandle;
 
   GST_INFO_OBJECT (this, "Pushing output buffers");
   error =
-      gst_omx_base_for_each_pad (this, gst_omx_base_push_buffers,
+      gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_push_buffers,
       GST_PAD_UNKNOWN, NULL);
   if (GST_OMX_FAIL (error))
     goto nopush;
 
   this->started = TRUE;
+  
+  error = gst_omx_basedecoder_start_push_task(this);
+  if (GST_OMX_FAIL (error))
+    goto startpushtask;
 
   return error;
 
@@ -888,6 +927,11 @@ alreadystarted:
 starthandle:
   {
     GST_ERROR_OBJECT (this, "Unable to set handle to Idle");
+    return error;
+  }
+startpushtask:
+  {
+    GST_ERROR_OBJECT (this, "Unable to start push task");
     return error;
   }
 noalloc:
@@ -903,7 +947,7 @@ nopush:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_stop (GstOmxBase * this)
+gst_omx_basedecoder_stop (GstOmxBaseDecoder * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
@@ -918,7 +962,7 @@ gst_omx_base_stop (GstOmxBase * this)
     if (!(this->audio_component)) {
       GST_INFO_OBJECT (this, "Flushing ports");
       error =
-          gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+          gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
           GST_PAD_UNKNOWN, NULL);
       if (GST_OMX_FAIL (error))
         goto noflush;
@@ -933,11 +977,18 @@ gst_omx_base_stop (GstOmxBase * this)
     goto statechange;
 
   GST_INFO_OBJECT (this, "Waiting for handle to become Idle");
-  error = gst_omx_base_wait_for_condition (this,
-      gst_omx_base_condition_state, (gpointer) OMX_StateIdle,
+  error = gst_omx_basedecoder_wait_for_condition (this,
+      gst_omx_basedecoder_condition_state, (gpointer) OMX_StateIdle,
       (gpointer) & this->state);
   if (GST_OMX_FAIL (error))
     goto statechange;
+
+
+  error = gst_omx_basedecoder_clear_queue(this);
+
+  if (GST_OMX_FAIL (error))
+    goto noflush;
+
 
   GST_INFO_OBJECT (this, "Sending handle to Loaded");
   g_mutex_lock (&_omx_mutex);
@@ -949,14 +1000,14 @@ gst_omx_base_stop (GstOmxBase * this)
 
   GST_INFO_OBJECT (this, "Freeing port buffers");
   error =
-      gst_omx_base_for_each_pad (this, gst_omx_base_free_buffers,
+      gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_free_buffers,
       GST_PAD_UNKNOWN, NULL);
   if (GST_OMX_FAIL (error))
     goto nofree;
 
   GST_INFO_OBJECT (this, "Waiting for handle to become Loaded");
-  error = gst_omx_base_wait_for_condition (this,
-      gst_omx_base_condition_state, (gpointer) OMX_StateLoaded,
+  error = gst_omx_basedecoder_wait_for_condition (this,
+      gst_omx_basedecoder_condition_state, (gpointer) OMX_StateLoaded,
       (gpointer) & this->state);
   if (GST_OMX_FAIL (error))
     goto statechange;
@@ -997,10 +1048,10 @@ nofree:
 }
 
 static GstStateChangeReturn
-gst_omx_base_change_state (GstElement * element, GstStateChange transition)
+gst_omx_basedecoder_change_state (GstElement * element, GstStateChange transition)
 {
   GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
-  GstOmxBase *this = GST_OMX_BASE (element);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (element);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   switch (transition) {
@@ -1011,6 +1062,7 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
       this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
     }
+    gst_omx_basedecoder_start_push_task(this);
   default:
     break;
   }
@@ -1020,25 +1072,12 @@ gst_omx_base_change_state (GstElement * element, GstStateChange transition)
     return ret;
 
   switch (transition) {
-  case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-    if (!this->flushing) {
-		GST_OBJECT_LOCK (this);
-		this->flushing = TRUE;
-		GST_OBJECT_UNLOCK (this);
-		/* DSP does not support flush ports */
-		if (!(this->audio_component)) {
-		  GST_INFO_OBJECT (this, "Flushing ports");
-		  error =
-			  gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
-			  GST_PAD_UNKNOWN, NULL);
-		  if (GST_OMX_FAIL (error))
-			goto noflush;
-		}
-	}
-    break;
+  case GST_STATE_CHANGE_PAUSED_TO_READY:
+    /*TODO: handle error*/
+    gst_omx_basedecoder_destroy_push_task(this);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
-    gst_omx_base_stop (this);
+    gst_omx_basedecoder_stop (this);
     break;
   default:
     break;
@@ -1055,7 +1094,7 @@ noflush:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_for_each_pad (GstOmxBase * this, GstOmxBasePadFunc func,
+gst_omx_basedecoder_for_each_pad (GstOmxBaseDecoder * this, GstOmxBaseDecoderPadFunc func,
     GstPadDirection direction, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -1083,7 +1122,7 @@ failed:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_peer_alloc_buffer (GstOmxBase * this, GstOmxPad * pad,
+gst_omx_basedecoder_peer_alloc_buffer (GstOmxBaseDecoder * this, GstOmxPad * pad,
     gpointer * pbuffer, guint32 * size)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -1121,7 +1160,7 @@ nodownstream:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_use_buffer (GstOmxBase * this, GList ** bufferlist,
+gst_omx_basedecoder_use_buffer (GstOmxBaseDecoder * this, GList ** bufferlist,
     gpointer * pbuffer, guint32 * size)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -1148,7 +1187,7 @@ nobuffer:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_init_use_buffer (GstOmxBase * this, GstOmxPad * pad,
+gst_omx_basedecoder_init_use_buffer (GstOmxBaseDecoder * this, GstOmxPad * pad,
     GList ** bufferlist, OMX_BUFFERHEADERTYPE * omxpeerbuffer)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -1185,7 +1224,7 @@ nouse:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+gst_omx_basedecoder_alloc_buffers (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *buffer = NULL;
@@ -1206,7 +1245,7 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   if (data) {
     OMX_BUFFERHEADERTYPE *omxpeerbuffer = (OMX_BUFFERHEADERTYPE *) data;
     error =
-        gst_omx_base_init_use_buffer (this, pad, &peerbuffers, omxpeerbuffer);
+        gst_omx_basedecoder_init_use_buffer (this, pad, &peerbuffers, omxpeerbuffer);
     if (error != OMX_ErrorNone)
       goto out;
   }
@@ -1221,11 +1260,11 @@ gst_omx_base_alloc_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
 
     /* First we try to ask for downstream OMX buffers */
     if (GST_PAD_IS_SRC (pad) && this->peer_alloc) {
-      error = gst_omx_base_peer_alloc_buffer (this, pad, &pbuffer, &size);
+      error = gst_omx_basedecoder_peer_alloc_buffer (this, pad, &pbuffer, &size);
     } else if (GST_PAD_IS_SINK (pad) && data) {
       if (top_field) {
         currentbuffer = peerbuffers;
-        error = gst_omx_base_use_buffer (this, &peerbuffers, &pbuffer, &size);
+        error = gst_omx_basedecoder_use_buffer (this, &peerbuffers, &pbuffer, &size);
       } else {
         pbuffer = pbuffer + this->field_offset;
       }
@@ -1309,7 +1348,7 @@ addbuffer:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_free_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+gst_omx_basedecoder_free_buffers (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *buffer;
@@ -1377,7 +1416,7 @@ nofree:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_push_buffers (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+gst_omx_basedecoder_push_buffers (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_BUFFERHEADERTYPE *buffer;
@@ -1434,7 +1473,7 @@ shortread:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+gst_omx_basedecoder_flush_ports (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_PARAM_PORTDEFINITIONTYPE *port = GST_OMX_PAD_PORT (pad);
@@ -1454,13 +1493,12 @@ gst_omx_base_flush_ports (GstOmxBase * this, GstOmxPad * pad, gpointer data)
   g_mutex_unlock (&_omx_mutex);
 
   GST_DEBUG_OBJECT (this, "Waiting for port to flush");
-  error = gst_omx_base_wait_for_condition (this,
-      gst_omx_base_condition_disabled, (gpointer) & pad->flushing, NULL);
+  error = gst_omx_basedecoder_wait_for_condition (this,
+      gst_omx_basedecoder_condition_disabled, (gpointer) & pad->flushing, NULL);
   if (GST_OMX_FAIL (error))
     goto noflush;
 
   return error;
-
 noflush:
   {
     GST_ERROR_OBJECT (this, "Unable to flush port %d", (int) port->nPortIndex);
@@ -1470,7 +1508,7 @@ noflush:
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_enable_pad (GstOmxBase * this, GstOmxPad * pad, gpointer data)
+gst_omx_basedecoder_enable_pad (GstOmxBaseDecoder * this, GstOmxPad * pad, gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
   guint32 padidx = (guint32) data;
@@ -1484,7 +1522,7 @@ gst_omx_base_enable_pad (GstOmxBase * this, GstOmxPad * pad, gpointer data)
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_set_flushing_pad (GstOmxBase * this, GstOmxPad * pad,
+gst_omx_basedecoder_set_flushing_pad (GstOmxBaseDecoder * this, GstOmxPad * pad,
     gpointer data)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
@@ -1501,11 +1539,11 @@ gst_omx_base_set_flushing_pad (GstOmxBase * this, GstOmxPad * pad,
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_event_callback (OMX_HANDLETYPE handle,
+gst_omx_basedecoder_event_callback (OMX_HANDLETYPE handle,
     gpointer data,
     OMX_EVENTTYPE event, guint32 nevent1, guint32 nevent2, gpointer eventdata)
 {
-  GstOmxBase *this = GST_OMX_BASE (data);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (data);
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   switch (event) {
@@ -1525,7 +1563,7 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
 
       if (OMX_CommandPortEnable == nevent1) {
         g_mutex_lock (&this->waitmutex);
-        gst_omx_base_for_each_pad (this, gst_omx_base_enable_pad,
+        gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_enable_pad,
             GST_PAD_UNKNOWN, (gpointer) nevent2);
         g_cond_signal (&this->waitcond);
         g_mutex_unlock (&this->waitmutex);
@@ -1533,7 +1571,7 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
 
       if (OMX_CommandFlush == nevent1) {
         g_mutex_lock (&this->waitmutex);
-        gst_omx_base_for_each_pad (this, gst_omx_base_set_flushing_pad,
+        gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_set_flushing_pad,
             GST_PAD_UNKNOWN, (gpointer) nevent2);
         g_cond_signal (&this->waitcond);
         g_mutex_unlock (&this->waitmutex);
@@ -1584,49 +1622,32 @@ gst_omx_base_event_callback (OMX_HANDLETYPE handle,
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
+gst_omx_basedecoder_fill_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * outbuf)
 {
-  GstOmxBase *this = GST_OMX_BASE (data);
-  GstOmxBaseClass *klass = GST_OMX_BASE_GET_CLASS (this);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (data);
+  GstOmxBaseDecoderClass *klass = GST_OMX_BASEDECODER_GET_CLASS (this);
   OMX_BUFFERHEADERTYPE *omxbuf;
   gboolean busy;
   GstOmxBufferData *bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
   OMX_ERRORTYPE error = OMX_ErrorNone;
   gboolean flushing;
+  GstOmxPad *srcpad = GST_OMX_PAD (bufdata->pad);
 
   GST_LOG_OBJECT (this, "Fill buffer callback for buffer %p->%p", outbuf,
       outbuf->pBuffer);
 
-  GST_OBJECT_LOCK (this);
-  flushing = this->flushing;
-  GST_OBJECT_UNLOCK (this);
 
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
 
   if (busy)
     goto illegal;
 
-  if (flushing)
-    goto drop;
 
-  if (this->fill_ret != GST_FLOW_OK)
-    goto drop;
+  gst_omx_buf_tab_use_buffer (srcpad->buffers, outbuf);
 
-  GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
-      GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
-      GST_STATE_NEXT (this));
-  if (GST_STATE_PAUSED > GST_STATE (this))
-    goto closing;
+  error = gst_omx_buf_queue_push_buffer (this->queue_buffers, outbuf);
 
-  gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
-
-  if (klass->omx_fill_buffer) {
-    this->fill_ret = klass->omx_fill_buffer (this, outbuf);
-    if (this->fill_ret != GST_FLOW_OK) {
-      goto cbfailed;
-    }
-  }
 
   /* In some cases the EoS event arrives before we encode the
   *  desired amount of frames using the num_buffers property we
@@ -1652,34 +1673,22 @@ illegal:
     /* g_mutex_unlock (&_omx_mutex); */
     return error;
   }
-
 closing:
   {
     GST_INFO_OBJECT (this, "Discarding buffer %d while closing", bufdata->id);
-    return error;
+    g_mutex_lock (&_omx_mutex);
+    error = gst_omx_buf_tab_return_buffer (srcpad->buffers, outbuf);
+    g_mutex_unlock (&_omx_mutex);
+    return;
   }
 
-cbfailed:
-  {
-    GST_WARNING_OBJECT (this,"Subclass failed to process buffer (id:%d): %s",
-            bufdata->id, gst_flow_get_name (this->fill_ret));
-    return error;
-  }
-drop:
-  {
-    GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
-    g_mutex_lock (&_omx_mutex);
-    error = this->component->FillThisBuffer (this->handle, outbuf);
-    g_mutex_unlock (&_omx_mutex);
-    return error;
-  }
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_empty_callback (OMX_HANDLETYPE handle,
+gst_omx_basedecoder_empty_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * buffer)
 {
-  GstOmxBase *this = GST_OMX_BASE (data);
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (data);
   GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
   while (!bufdata->buffer) {
   };
@@ -1719,17 +1728,17 @@ noreturn:
 }
 
 gboolean
-gst_omx_base_add_pad (GstOmxBase * this, GstPad * pad)
+gst_omx_basedecoder_add_pad (GstOmxBaseDecoder * this, GstPad * pad)
 {
   GST_INFO_OBJECT (this, "Adding pad %s:%s", GST_DEBUG_PAD_NAME (pad));
 
   if (GST_PAD_SINK == GST_PAD_DIRECTION (pad)) {
-    gst_pad_set_chain_function (pad, GST_DEBUG_FUNCPTR (gst_omx_base_chain));
+    gst_pad_set_chain_function (pad, GST_DEBUG_FUNCPTR (gst_omx_basedecoder_chain));
     gst_pad_set_event_function (pad,
-        GST_DEBUG_FUNCPTR (gst_omx_base_event_handler));
+        GST_DEBUG_FUNCPTR (gst_omx_basedecoder_event_handler));
     gst_pad_set_setcaps_function (pad,
-        GST_DEBUG_FUNCPTR (gst_omx_base_set_caps));
-    gst_pad_set_bufferalloc_function (pad, gst_omx_base_alloc_buffer);
+        GST_DEBUG_FUNCPTR (gst_omx_basedecoder_set_caps));
+    gst_pad_set_bufferalloc_function (pad, gst_omx_basedecoder_alloc_buffer);
   }
 
   gst_object_ref (pad);
@@ -1740,8 +1749,8 @@ gst_omx_base_add_pad (GstOmxBase * this, GstPad * pad)
 
 
 OMX_ERRORTYPE
-gst_omx_base_wait_for_condition (GstOmxBase * this,
-    GstOmxBaseCondition condition, gpointer arg1, gpointer arg2)
+gst_omx_basedecoder_wait_for_condition (GstOmxBaseDecoder * this,
+    GstOmxBaseDecoderCondition condition, gpointer arg1, gpointer arg2)
 {
   guint64 endtime;
 
@@ -1767,7 +1776,7 @@ timeout:
 }
 
 gboolean
-gst_omx_base_condition_state (gpointer targetstate, gpointer currentstate)
+gst_omx_basedecoder_condition_state (gpointer targetstate, gpointer currentstate)
 {
   OMX_STATETYPE _targetstate = (OMX_STATETYPE) targetstate;
   OMX_STATETYPE _currentstate = *(OMX_STATETYPE *) currentstate;
@@ -1776,22 +1785,22 @@ gst_omx_base_condition_state (gpointer targetstate, gpointer currentstate)
 }
 
 gboolean
-gst_omx_base_condition_enabled (gpointer enabled, gpointer dummy)
+gst_omx_basedecoder_condition_enabled (gpointer enabled, gpointer dummy)
 {
   return *(gboolean *) enabled;
 }
 
 gboolean
-gst_omx_base_condition_disabled (gpointer enabled, gpointer dummy)
+gst_omx_basedecoder_condition_disabled (gpointer enabled, gpointer dummy)
 {
   return !*(gboolean *) enabled;
 }
 
 static GstFlowReturn
-gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
+gst_omx_basedecoder_alloc_buffer (GstPad * pad, guint64 offset,
     guint size, GstCaps * caps, GstBuffer ** buffer)
 {
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
   GstOmxPad *omxpad = GST_OMX_PAD (pad);
   gchar *capsdesc;
   OMX_BUFFERHEADERTYPE *omxbuf;
@@ -1811,7 +1820,7 @@ gst_omx_base_alloc_buffer (GstPad * pad, guint64 offset,
 
   if (!this->started) {
     GST_INFO_OBJECT (this, "Starting component");
-    error = gst_omx_base_start (this, NULL);
+    error = gst_omx_basedecoder_start (this, NULL);
     if (GST_OMX_FAIL (error))
       goto nostart;
   }
@@ -1856,14 +1865,14 @@ nostart:
 
 
 void
-gst_omx_base_release_buffer (gpointer data)
+gst_omx_basedecoder_release_buffer (gpointer data)
 {
 
   OMX_BUFFERHEADERTYPE *buffer = (OMX_BUFFERHEADERTYPE *) data;
   OMX_ERRORTYPE error;
   GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
   GstOmxPad *pad = bufdata->pad;
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
   gboolean flushing;
 
   GST_LOG_OBJECT (this, "Returning buffer %p to table", buffer);
@@ -1898,10 +1907,10 @@ nofill:
 }
 
 static gboolean
-gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
+gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 {
 
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseDecoder *this = GST_OMX_BASEDECODER (GST_OBJECT_PARENT (pad));
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   if (G_UNLIKELY (this == NULL)) {
@@ -1927,13 +1936,14 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 	    g_mutex_unlock(this->num_buffers_mutex);
 	  }
       GST_INFO_OBJECT (this, "EOS received, flushing ports");
+      gst_omx_basedecoder_pause_push_task(this);
       GST_OBJECT_LOCK (this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
       /*  DSP does not support flush ports */
       if (!(this->audio_component)) {
         error =
-            gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+            gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
             GST_PAD_UNKNOWN, NULL);
         if (GST_OMX_FAIL (error))
           goto noflush_eos;
@@ -1943,32 +1953,56 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_START:
     {
       GST_INFO_OBJECT (this, "Flush start received");
+      gst_omx_basedecoder_pause_push_task(this);
+      GST_OBJECT_LOCK(this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+ 
+    if (GST_STATE_PAUSED <=  GST_STATE (this)) {
+
+	GST_INFO_OBJECT (this, "Flush start received, flushing ports");
+	GST_OBJECT_LOCK(this);
+	this->flushing = TRUE;
+	GST_OBJECT_UNLOCK (this);
+	if (!(this->audio_component)&& this->started) {
+	  error =
+	    gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
+				       GST_PAD_UNKNOWN, NULL);
+	}
+      }
+      GST_INFO_OBJECT (this, "Clearing buffers");
+      gst_omx_basedecoder_clear_queue_fill(this);
+ 
       break;
     }
     case GST_EVENT_FLUSH_STOP:
     {
-      if (GST_STATE_PAUSED <=  GST_STATE (this)) {
-
-	GST_INFO_OBJECT (this, "Flush stop received, flushing ports");
-	GST_OBJECT_LOCK(this);
-	this->flushing = TRUE;
-	GST_OBJECT_UNLOCK (this);
-	if (!(this->audio_component)) {
-	  error =
-	    gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
-				       GST_PAD_UNKNOWN, NULL);
-	}
-      }
-
-
       GST_INFO_OBJECT (this, "Flush stop received,Updating output flags");
-    if(this->wait_keyframe){
-		this->drop_frame = TRUE;
-      }
+
+      gst_pad_event_default (pad, event); 
+      /*TODO: handle error*/
+      GST_INFO_OBJECT (this, "Clearing buffers");
+      gst_omx_basedecoder_clear_queue_fill(this);
+      
+      
       GST_OBJECT_LOCK(this);
       this->fill_ret = GST_FLOW_OK;
       this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
+      if(this->wait_keyframe){
+	this->drop_frame = TRUE;
+      }
+ 
+      /*TODO: handle error*/
+      GST_INFO_OBJECT (this, "Clearing buffers");
+      gst_omx_basedecoder_clear_queue_fill(this);
+
+
+	  /*TODO: handle error*/
+      GST_INFO_OBJECT (this, "Startig push task");
+      gst_omx_basedecoder_start_push_task(this);
+
+      goto exit;
       break;
     }
     default:
@@ -1977,10 +2011,207 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
   /* Handle everything else as default */
   gst_pad_event_default (pad, event);
 
+ exit:
   return TRUE;
 
 noflush_eos:
   GST_ERROR_OBJECT (this, "Unable to flush component after EOS: %s ",
       gst_omx_error_to_str (error));
   return FALSE;
+}
+
+
+void gst_omx_basedecoder_push_task( void *data)
+{
+
+
+  GstOmxBaseDecoder * this = GST_OMX_BASEDECODER (data);
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  GstOmxBaseDecoderClass *klass = GST_OMX_BASEDECODER_GET_CLASS (this);
+  GstOmxBufferData *bufdata = NULL;
+  gboolean flushing;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_LOG_OBJECT (this, "Entering push task");
+  GST_OBJECT_LOCK (this);
+  flushing = this->flushing;
+  GST_OBJECT_UNLOCK (this);
+
+  if (flushing)
+    {
+      goto drop;
+    }
+
+  if (this->fill_ret != GST_FLOW_OK)
+    goto drop;
+
+  omx_buf = gst_omx_buf_queue_pop_buffer_check_release (this->queue_buffers);
+
+  if (!omx_buf) {
+    goto timeout;
+  }
+
+  bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
+
+  GST_LOG_OBJECT (this, "Calling fill buffer callback");
+  if (klass->omx_fill_buffer) {
+    this->fill_ret = klass->omx_fill_buffer (this, omx_buf);
+    if (this->fill_ret != GST_FLOW_OK) {
+      goto cbfailed;
+    }
+  }
+  return;
+
+
+
+cbfailed:
+  {
+    GST_WARNING_OBJECT (this,"Subclass failed to process buffer (id:%d): %s",
+            bufdata->id, gst_flow_get_name (this->fill_ret));
+    return;
+  }
+  
+timeout:
+  {
+    GST_ELEMENT_ERROR (this, LIBRARY, SETTINGS, (NULL),
+        ("Cannot acquire output buffer from pending queue"));
+    return;
+  }
+
+
+drop:
+  {
+    if(omx_buf){
+      GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
+    }
+    else{
+      GST_INFO_OBJECT (this, "Queue empty : %s",gst_flow_get_name (this->fill_ret));
+    }
+    return ;
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_pause_push_task (GstOmxBaseDecoder * this)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (this, "Pausing push task ");
+  if(!gst_task_pause(this->pushtask))
+      GST_WARNING_OBJECT (this,"Failed to pause push task");
+
+  GST_INFO_OBJECT (this, "Push task paused");
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_start_push_task (GstOmxBaseDecoder * this)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (this, "Starting push task ");
+  if(!gst_task_start(this->pushtask))
+      GST_WARNING_OBJECT (this,"Failed to start push task");
+
+  GST_INFO_OBJECT (this, "Push task started");
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_create_push_task (GstOmxBaseDecoder * this)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (this, "Creating Push task...");
+  this->pushtask = gst_task_create(gst_omx_basedecoder_push_task, (gpointer) this);
+  if(!this->pushtask)
+    GST_ERROR_OBJECT (this,"Failed to create Push task");
+  g_static_rec_mutex_init(&this->taskmutex);
+  gst_task_set_lock(this->pushtask,&this->taskmutex);
+  GST_INFO_OBJECT (this, "Push task created");
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_stop_push_task (GstOmxBaseDecoder * this)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (this, "Stopping task on srcpad...");
+  
+  gst_omx_buf_queue_release (this->queue_buffers);
+
+  if( !gst_task_join(this->pushtask))
+      GST_WARNING_OBJECT (this,"Failed stop task ");
+
+  GST_INFO_OBJECT (this, "Finished push task");
+
+  return error;
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_destroy_push_task (GstOmxBaseDecoder * this)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (this, "Stopping task on srcpad...");
+  
+  gst_omx_buf_queue_release (this->queue_buffers);
+
+  if( !gst_task_join(this->pushtask))
+      GST_WARNING_OBJECT (this,"Failed stop task on pad");
+
+  GST_INFO_OBJECT (this, "Unref push task");
+  GST_INFO_OBJECT (this, "Finished task on srcpad");
+
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_clear_queue (GstOmxBaseDecoder * this){
+
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBufferData *bufdata = NULL;
+  GstOmxPad *pad = NULL; 
+
+  omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
+  while (omx_buf){
+    bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
+    pad = bufdata->pad;
+    GST_LOG_OBJECT (this, "Dropping buffer %d %p %p->%p", bufdata->id, bufdata,
+      omx_buf, omx_buf->pBuffer);
+    g_mutex_lock (&_omx_mutex);
+    error = gst_omx_buf_tab_return_buffer (pad->buffers, omx_buf);
+    g_mutex_unlock (&_omx_mutex);
+    omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
+  }
+  GST_INFO_OBJECT (this, " Pushed Queue empty") ;
+  return error;
+}
+
+static OMX_ERRORTYPE
+gst_omx_basedecoder_clear_queue_fill (GstOmxBaseDecoder * this){
+
+  OMX_BUFFERHEADERTYPE *omx_buf = NULL;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBufferData *bufdata = NULL;
+  GstOmxPad *pad = NULL; 
+
+  omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
+  while (omx_buf){
+    bufdata = (GstOmxBufferData *) omx_buf->pAppPrivate;
+    pad = bufdata->pad;
+    GST_LOG_OBJECT (this, "Dropping buffer %d %p %p->%p", bufdata->id, bufdata,
+      omx_buf, omx_buf->pBuffer);
+    g_mutex_lock (&_omx_mutex);
+    error = gst_omx_buf_tab_return_buffer (pad->buffers, omx_buf);
+    error = this->component->FillThisBuffer (this->handle, omx_buf);
+    g_mutex_unlock (&_omx_mutex);
+    omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
+  }
+  GST_INFO_OBJECT (this, " Pushed Queue empty") ;
+  return error;
 }

@@ -67,11 +67,11 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     );
 
 #define gst_omx_h264_dec_parent_class parent_class
-G_DEFINE_TYPE (GstOmxH264Dec, gst_omx_h264_dec, GST_TYPE_OMX_BASE);
+G_DEFINE_TYPE (GstOmxH264Dec, gst_omx_h264_dec, GST_TYPE_OMX_BASEDECODER);
 
 static gboolean gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps);
-static OMX_ERRORTYPE gst_omx_h264_dec_init_pads (GstOmxBase * this);
-static GstFlowReturn gst_omx_h264_dec_fill_callback (GstOmxBase *,
+static OMX_ERRORTYPE gst_omx_h264_dec_init_pads (GstOmxBaseDecoder * this);
+static GstFlowReturn gst_omx_h264_dec_fill_callback (GstOmxBaseDecoder *,
     OMX_BUFFERHEADERTYPE *);
 /* GObject vmethod implementations */
 
@@ -80,10 +80,10 @@ static void
 gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
 {
   GstElementClass *gstelement_class;
-  GstOmxBaseClass *gstomxbase_class;
+  GstOmxBaseDecoderClass *gstomxbasedecoder_class;
 
   gstelement_class = (GstElementClass *) klass;
-  gstomxbase_class = GST_OMX_BASE_CLASS (klass);
+  gstomxbasedecoder_class = GST_OMX_BASEDECODER_CLASS (klass);
 
   gst_element_class_set_details_simple (gstelement_class,
       "OpenMAX H.264 video decoder",
@@ -96,12 +96,12 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
 
-  gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
-  gstomxbase_class->omx_fill_buffer =
+  gstomxbasedecoder_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
+  gstomxbasedecoder_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_h264_dec_fill_callback);
-  gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_init_pads);
+  gstomxbasedecoder_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_init_pads);
 
-  gstomxbase_class->handle_name = "OMX.TI.DUCATI.VIDDEC";
+  gstomxbasedecoder_class->handle_name = "OMX.TI.DUCATI.VIDDEC";
 
   /* debug category for filtering log messages */
   GST_DEBUG_CATEGORY_INIT (gst_omx_h264_dec_debug, "omx_h264dec",
@@ -120,14 +120,14 @@ gst_omx_h264_dec_init (GstOmxH264Dec * this)
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&sink_template), "sink"));
   gst_pad_set_active (this->sinkpad, TRUE);
-  gst_omx_base_add_pad (GST_OMX_BASE (this), this->sinkpad);
+  gst_omx_basedecoder_add_pad (GST_OMX_BASEDECODER (this), this->sinkpad);
   gst_element_add_pad (GST_ELEMENT (this), this->sinkpad);
 
   this->srcpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
   gst_pad_set_active (this->srcpad, TRUE);
-  gst_omx_base_add_pad (GST_OMX_BASE (this), this->srcpad);
+  gst_omx_basedecoder_add_pad (GST_OMX_BASEDECODER (this), this->srcpad);
   gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
 }
 
@@ -235,7 +235,7 @@ nosetcaps:
 
 
 static OMX_ERRORTYPE
-gst_omx_h264_dec_init_pads (GstOmxBase * base)
+gst_omx_h264_dec_init_pads (GstOmxBaseDecoder * base)
 {
   GstOmxH264Dec *this = GST_OMX_H264_DEC (base);
   OMX_PARAM_PORTDEFINITIONTYPE *port = NULL;
@@ -259,7 +259,7 @@ gst_omx_h264_dec_init_pads (GstOmxBase * base)
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
 
   g_mutex_lock (&_omx_mutex);
-  error = OMX_SetParameter (GST_OMX_BASE (this)->handle,
+  error = OMX_SetParameter (GST_OMX_BASEDECODER (this)->handle,
       OMX_IndexParamPortDefinition, port);
   g_mutex_unlock (&_omx_mutex);
   if (error != OMX_ErrorNone) {
@@ -286,7 +286,7 @@ gst_omx_h264_dec_init_pads (GstOmxBase * base)
 
   g_mutex_lock (&_omx_mutex);
   error =
-      OMX_SetParameter (GST_OMX_BASE (this)->handle,
+      OMX_SetParameter (GST_OMX_BASEDECODER (this)->handle,
       OMX_IndexParamPortDefinition, port);
   g_mutex_unlock (&_omx_mutex);
   if (error != OMX_ErrorNone) {
@@ -306,7 +306,7 @@ noport:
 }
 
 static GstFlowReturn
-gst_omx_h264_dec_fill_callback (GstOmxBase * base,
+gst_omx_h264_dec_fill_callback (GstOmxBaseDecoder * base,
     OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxH264Dec *this = GST_OMX_H264_DEC (base);
@@ -343,7 +343,7 @@ gst_omx_h264_dec_fill_callback (GstOmxBase * base,
   GST_BUFFER_CAPS (buffer) = caps;
   GST_BUFFER_DATA (buffer) = outbuf->pBuffer;
   GST_BUFFER_MALLOCDATA (buffer) = (guint8 *) outbuf;
-  GST_BUFFER_FREE_FUNC (buffer) = gst_omx_base_release_buffer;
+  GST_BUFFER_FREE_FUNC (buffer) = gst_omx_basedecoder_release_buffer;
 
   /* Make buffer fields GStreamer friendly */
   GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
@@ -365,7 +365,7 @@ gst_omx_h264_dec_fill_callback (GstOmxBase * base,
   g_mutex_unlock (&base->stream_mutex); 
 
   GST_LOG_OBJECT (this, " Buffer %p->%p  pushed",
-      outbuf, outbuf->pBuffer)
+      outbuf, outbuf->pBuffer);
 
   if (GST_FLOW_OK != ret)
     goto nopush;

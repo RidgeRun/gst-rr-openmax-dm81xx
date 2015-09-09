@@ -158,3 +158,21 @@ gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue)
   return error;
 
 }
+
+
+OMX_ERRORTYPE
+gst_omx_buf_queue_free (GstOmxBufQueue * bufqueue)
+{
+  OMX_ERRORTYPE error;
+  /*Add check of errors?*/
+  g_return_val_if_fail (bufqueue, OMX_ErrorBadParameter);
+
+  error = OMX_ErrorNone;
+  g_mutex_lock (&bufqueue->queuemutex);
+  g_queue_free(bufqueue->queue);
+  g_mutex_unlock (&bufqueue->queuemutex);
+
+  g_free (bufqueue);
+ exit:
+  return error;
+}
