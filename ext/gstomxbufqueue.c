@@ -143,7 +143,7 @@ timeout:
 
 
 OMX_ERRORTYPE
-gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue)
+gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue, gboolean release)
 {
   OMX_ERRORTYPE error;
 
@@ -151,7 +151,7 @@ gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue)
 
   error = OMX_ErrorNone;
   g_mutex_lock (&bufqueue->queuemutex);
-  bufqueue->release=TRUE;
+  bufqueue->release=release;
   g_cond_signal (&bufqueue->queuecond);
   g_mutex_unlock (&bufqueue->queuemutex);
 

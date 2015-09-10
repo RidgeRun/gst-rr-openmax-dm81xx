@@ -164,8 +164,8 @@ gst_omx_basedecoder_clear_queue_fill (GstOmxBaseDecoder * this);
 static void
 gst_omx_basedecoder_base_init (gpointer g_class)
 {
-  GST_DEBUG_CATEGORY_INIT (gst_omx_basedecoder_debug, "omx_base",
-      0, "RidgeRun's OMX base element");
+  GST_DEBUG_CATEGORY_INIT (gst_omx_basedecoder_debug, "omx_basedecoder",
+      0, "RidgeRun's OMX base decoder element");
 }
 
 /* initialize the omx's class */
@@ -725,7 +725,7 @@ gst_omx_basedecoder_finalize (GObject * object)
   gst_omx_basedecoder_free_omx (this);
 
   /*TODO: Check for errors*/
-  gst_omx_buf_queue_release(this->queue_buffers);
+  gst_omx_buf_queue_release(this->queue_buffers,TRUE);
 
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -1964,11 +1964,14 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 	GST_OBJECT_LOCK(this);
 	this->flushing = TRUE;
 	GST_OBJECT_UNLOCK (this);
-	if (!(this->audio_component)&& this->started) {
+	/* Warning; Flushing decoders causes an endurance error this is commented while
+		this issue is fixed
+	*/
+	/*	if (!(this->audio_component)&& this->started) {
 	  error =
 	    gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
 				       GST_PAD_UNKNOWN, NULL);
-	}
+				       }*/
       }
       GST_INFO_OBJECT (this, "Clearing buffers");
       gst_omx_basedecoder_clear_queue_fill(this);
@@ -2110,6 +2113,8 @@ gst_omx_basedecoder_start_push_task (GstOmxBaseDecoder * this)
 {
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
+  gst_omx_buf_queue_release (this->queue_buffers, FALSE);
+
   GST_INFO_OBJECT (this, "Starting push task ");
   if(!gst_task_start(this->pushtask))
       GST_WARNING_OBJECT (this,"Failed to start push task");
@@ -2140,7 +2145,7 @@ gst_omx_basedecoder_stop_push_task (GstOmxBaseDecoder * this)
 
   GST_INFO_OBJECT (this, "Stopping task on srcpad...");
   
-  gst_omx_buf_queue_release (this->queue_buffers);
+  gst_omx_buf_queue_release (this->queue_buffers, TRUE);
 
   if( !gst_task_join(this->pushtask))
       GST_WARNING_OBJECT (this,"Failed stop task ");
@@ -2158,7 +2163,7 @@ gst_omx_basedecoder_destroy_push_task (GstOmxBaseDecoder * this)
 
   GST_INFO_OBJECT (this, "Stopping task on srcpad...");
   
-  gst_omx_buf_queue_release (this->queue_buffers);
+  gst_omx_buf_queue_release (this->queue_buffers, TRUE);
 
   if( !gst_task_join(this->pushtask))
       GST_WARNING_OBJECT (this,"Failed stop task on pad");

@@ -44,6 +44,6 @@ OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
 OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue *);
 OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *, OMX_BUFFERHEADERTYPE *);
 OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer_check_release (GstOmxBufQueue *);
-OMX_ERRORTYPE gst_omx_buf_queue_release (GstOmxBufQueue *);
+OMX_ERRORTYPE gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue, gboolean release);
 
 #endif /*__GST_OMX_BUF_QUEUE_H__*/
