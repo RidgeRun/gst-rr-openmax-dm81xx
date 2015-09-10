@@ -1062,7 +1062,7 @@ gst_omx_basedecoder_change_state (GstElement * element, GstStateChange transitio
       this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
     }
-    gst_omx_basedecoder_start_push_task(this);
+
   default:
     break;
   }

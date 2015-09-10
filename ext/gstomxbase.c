@@ -1943,6 +1943,10 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_START:
     {
       GST_INFO_OBJECT (this, "Flush start received");
+      GST_OBJECT_LOCK(this);
+      this->flushing = TRUE;
+      GST_OBJECT_UNLOCK (this);
+      
       break;
     }
     case GST_EVENT_FLUSH_STOP:
