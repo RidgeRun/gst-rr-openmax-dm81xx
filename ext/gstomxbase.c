@@ -1977,6 +1977,13 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
       goto exit;
       break;
     }
+  case GST_EVENT_NEWSEGMENT:
+    {
+      GST_OBJECT_LOCK(this);
+      this->fill_ret = GST_FLOW_OK;
+      GST_OBJECT_UNLOCK (this);
+      break;
+    }	
     default:
       break;
   }

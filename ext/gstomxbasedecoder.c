@@ -726,7 +726,9 @@ gst_omx_basedecoder_finalize (GObject * object)
 
   /*TODO: Check for errors*/
   gst_omx_buf_queue_release(this->queue_buffers,TRUE);
-
+  /*TODO: Check for errors*/
+  gst_omx_basedecoder_destroy_push_task (this);
+  
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -1074,7 +1076,7 @@ gst_omx_basedecoder_change_state (GstElement * element, GstStateChange transitio
   switch (transition) {
   case GST_STATE_CHANGE_PAUSED_TO_READY:
     /*TODO: handle error*/
-    gst_omx_basedecoder_destroy_push_task(this);
+    gst_omx_basedecoder_stop_push_task(this);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
     gst_omx_basedecoder_stop (this);
@@ -1957,6 +1959,10 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
       GST_OBJECT_LOCK(this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
+
+      /*TODO: handle error*/
+      GST_INFO_OBJECT (this, "Clearing buffers in queue");
+      gst_omx_basedecoder_clear_queue_fill(this);
  
     if (GST_STATE_PAUSED <=  GST_STATE (this)) {
 
@@ -1991,20 +1997,30 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 	this->drop_frame = TRUE;
       }
  
-      /*TODO: handle error*/
-      GST_INFO_OBJECT (this, "Clearing buffers in queue");
-      gst_omx_basedecoder_clear_queue_fill(this);
-
-
-	  /*TODO: handle error*/
-      GST_INFO_OBJECT (this, "Startig push task");
-      gst_omx_basedecoder_start_push_task(this);
 
       goto exit;
       break;
     }
-    default:
-      break;
+    case GST_EVENT_NEWSEGMENT:
+      {
+	GST_INFO_OBJECT (this, "New segment received");
+	if(gst_task_get_state(this->pushtask) != GST_TASK_STARTED ){
+	  
+	  GST_OBJECT_LOCK(this);
+	  this->fill_ret = GST_FLOW_OK;
+	  GST_OBJECT_UNLOCK (this);
+	  /*TODO: handle error*/
+	  GST_INFO_OBJECT (this, "Clearing buffers in queue");
+	  gst_omx_basedecoder_clear_queue_fill(this);
+	  
+	  /*TODO: handle error*/
+	  GST_INFO_OBJECT (this, "Startig push task");
+	  gst_omx_basedecoder_start_push_task(this);
+	}
+	break;
+      }
+  default:
+    break;
   }
   /* Handle everything else as default */
   gst_pad_event_default (pad, event);
@@ -2158,12 +2174,11 @@ gst_omx_basedecoder_destroy_push_task (GstOmxBaseDecoder * this)
 
   GST_INFO_OBJECT (this, "Stopping task on srcpad...");
   
-  gst_omx_buf_queue_release (this->queue_buffers, TRUE);
-
-  if( !gst_task_join(this->pushtask))
-      GST_WARNING_OBJECT (this,"Failed stop task on pad");
-
+  if (gst_task_get_state(this->pushtask) != GST_TASK_STOPPED ){
+    gst_omx_basedecoder_stop_push_task(this);
+  }
   GST_INFO_OBJECT (this, "Unref push task");
+  gst_object_unref(this->pushtask);
   GST_INFO_OBJECT (this, "Finished task on srcpad");
 
   return error;
