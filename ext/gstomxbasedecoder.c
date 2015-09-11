@@ -1973,8 +1973,6 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 				       GST_PAD_UNKNOWN, NULL);
 				       }*/
       }
-      GST_INFO_OBJECT (this, "Clearing buffers");
-      gst_omx_basedecoder_clear_queue_fill(this);
  
       break;
     }
@@ -1984,10 +1982,7 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 
       gst_pad_event_default (pad, event); 
       /*TODO: handle error*/
-      GST_INFO_OBJECT (this, "Clearing buffers");
-      gst_omx_basedecoder_clear_queue_fill(this);
-      
-      
+            
       GST_OBJECT_LOCK(this);
       this->fill_ret = GST_FLOW_OK;
       this->flushing = FALSE;
@@ -1997,7 +1992,7 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
       }
  
       /*TODO: handle error*/
-      GST_INFO_OBJECT (this, "Clearing buffers");
+      GST_INFO_OBJECT (this, "Clearing buffers in queue");
       gst_omx_basedecoder_clear_queue_fill(this);
 
 

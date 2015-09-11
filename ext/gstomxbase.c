@@ -1951,7 +1951,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     }
     case GST_EVENT_FLUSH_STOP:
     {
-      if (GST_STATE_PAUSED <=  GST_STATE (this)) {
+      if (GST_STATE_PAUSED <  GST_STATE (this)) {
 
 	GST_INFO_OBJECT (this, "Flush stop received, flushing ports");
 	GST_OBJECT_LOCK(this);
@@ -1964,6 +1964,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
 	}
       }
 
+      gst_pad_event_default (pad, event);
 
       GST_INFO_OBJECT (this, "Flush stop received,Updating output flags");
     if(this->wait_keyframe){
@@ -1973,6 +1974,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
       this->fill_ret = GST_FLOW_OK;
       this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
+      goto exit;
       break;
     }
     default:
@@ -1980,7 +1982,7 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
   }
   /* Handle everything else as default */
   gst_pad_event_default (pad, event);
-
+ exit:
   return TRUE;
 
 noflush_eos:
