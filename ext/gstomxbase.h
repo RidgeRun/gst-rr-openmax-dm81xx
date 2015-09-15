@@ -77,7 +77,6 @@ struct _GstOmxBase
   
   /*Conditions for Paused State*/
   GMutex pushwaitmutex;
-  GCond pausedwaitcond;
 
   GstFlowReturn fill_ret;
 

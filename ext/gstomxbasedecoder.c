@@ -2056,8 +2056,8 @@ void gst_omx_basedecoder_push_task( void *data)
       goto drop;
     }
 
-  if (this->fill_ret != GST_FLOW_OK)
-    goto drop;
+  /*  if (this->fill_ret != GST_FLOW_OK)
+      goto drop;*/
 
   omx_buf = gst_omx_buf_queue_pop_buffer_check_release (this->queue_buffers);
 

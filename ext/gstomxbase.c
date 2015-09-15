@@ -346,6 +346,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->fill_ret = GST_FLOW_OK;
   this->state = OMX_StateInvalid;
   g_mutex_init (&this->waitmutex);
+  g_mutex_init (&this->pushwaitmutex);
   g_cond_init (&this->waitcond);
 
   this->num_buffers = 0;
@@ -442,11 +443,14 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   flushing = this->flushing;
   GST_OBJECT_UNLOCK (this);
 
+g_mutex_lock (&this->pushwaitmutex);
   if (flushing)
     goto flushing;
 
   if (this->fill_ret)
     goto pusherror;
+
+  g_mutex_unlock (&this->pushwaitmutex);
 
   if (!this->started) {
     if (GST_OMX_IS_OMX_BUFFER (buf)) {
@@ -619,6 +623,7 @@ flushing:
   {
     GST_WARNING_OBJECT (this, "Discarding buffer while flushing");
     gst_buffer_unref (buf);
+    g_mutex_unlock (&this->pushwaitmutex);
     return GST_FLOW_WRONG_STATE;
   }
 pusherror:
@@ -626,6 +631,7 @@ pusherror:
     GST_DEBUG_OBJECT (this, "Dropping buffer, push error %s",
         gst_flow_get_name (this->fill_ret));
     gst_buffer_unref (buf);
+    g_mutex_unlock (&this->pushwaitmutex);
     return this->fill_ret;
   }
 nostart:
@@ -1610,8 +1616,8 @@ gst_omx_base_fill_callback (OMX_HANDLETYPE handle,
   if (flushing)
     goto drop;
 
-  if (this->fill_ret != GST_FLOW_OK)
-    goto drop;
+  /*  if (this->fill_ret != GST_FLOW_OK)
+      goto drop;*/
 
   GST_LOG_OBJECT (this, "Current %d Pending %d Target %d Next %d",
       GST_STATE (this), GST_STATE_PENDING (this), GST_STATE_TARGET (this),
@@ -1979,8 +1985,10 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
     }
   case GST_EVENT_NEWSEGMENT:
     {
+      GST_INFO_OBJECT (this, "New segment received , updating output flags");
       GST_OBJECT_LOCK(this);
       this->fill_ret = GST_FLOW_OK;
+      this->flushing = FALSE;
       GST_OBJECT_UNLOCK (this);
       break;
     }	
