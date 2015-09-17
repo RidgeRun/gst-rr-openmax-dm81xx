@@ -1584,10 +1584,10 @@ gst_omx_basedecoder_event_callback (OMX_HANDLETYPE handle,
 			gst_omx_error_to_str (nevent1));
 
       /*Post a message to let the application know we had an error */
-      gst_element_post_message (this,
+      /* gst_element_post_message (this,
 				gst_message_new_application (GST_OBJECT (this),
 							   gst_structure_new ("omx-event-error", NULL)));
-
+      */
       /* GST_ELEMENT_ERROR (this, LIBRARY, ENCODE, */
       /*                 (gst_omx_error_to_str (nevent1)), (NULL)); */
       break;
@@ -1963,31 +1963,16 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
       /*TODO: handle error*/
       GST_INFO_OBJECT (this, "Clearing buffers in queue");
       gst_omx_basedecoder_clear_queue_fill(this);
- 
-    if (GST_STATE_PAUSED <=  GST_STATE (this)) {
-
-	GST_INFO_OBJECT (this, "Flush start received, flushing ports");
-	GST_OBJECT_LOCK(this);
-	this->flushing = TRUE;
-	GST_OBJECT_UNLOCK (this);
-	/* Warning; Flushing decoders causes an endurance error this is commented while
-		this issue is fixed
-	*/
-	/*	if (!(this->audio_component)&& this->started) {
-	  error =
-	    gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
-				       GST_PAD_UNKNOWN, NULL);
-				       }*/
-      }
- 
+  
       break;
     }
     case GST_EVENT_FLUSH_STOP:
     {
       GST_INFO_OBJECT (this, "Flush stop received,Updating output flags");
-
       gst_pad_event_default (pad, event); 
       /*TODO: handle error*/
+      gst_omx_basedecoder_stop_push_task(this);
+      gst_omx_basedecoder_clear_queue_fill(this);
             
       GST_OBJECT_LOCK(this);
       this->fill_ret = GST_FLOW_OK;
@@ -2004,7 +1989,7 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
     case GST_EVENT_NEWSEGMENT:
       {
 	GST_INFO_OBJECT (this, "New segment received");
-	if(gst_task_get_state(this->pushtask) != GST_TASK_STARTED ){
+	if(gst_task_get_state(this->pushtask) != GST_TASK_STARTED && this->started  ){
 	  
 	  GST_OBJECT_LOCK(this);
 	  this->fill_ret = GST_FLOW_OK;
