@@ -34,8 +34,8 @@ static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("audio/mpeg,"
-        "mpegversion = {2,4}," "channels=  [1,8]," "rate = [8000,96000],"
-        "object_type = [1,6]," "parsed=true")
+        "mpegversion={2,4}," "channels=[1,8]," "rate=[8000,96000],"
+        "object_type=[1,6]," "parsed=true")
     );
 
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
@@ -144,19 +144,20 @@ gst_omx_aac_dec_init (GstOmxAACDec * this)
   base->output_buffers = 1;
   base->input_buffers = 1;
   /* Add pads */
-  this->sinkpad =
-      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
-          (&sink_template), "sink"));
-  gst_pad_set_active (this->sinkpad, TRUE);
-  gst_omx_base_add_pad (GST_OMX_BASE (this), this->sinkpad);
-  gst_element_add_pad (GST_ELEMENT (this), this->sinkpad);
-
   this->srcpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
   gst_pad_set_active (this->srcpad, TRUE);
   gst_omx_base_add_pad (GST_OMX_BASE (this), this->srcpad);
   gst_element_add_pad (GST_ELEMENT (this), this->srcpad);
+  
+   this->sinkpad =
+      GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
+          (&sink_template), "sink"));
+  gst_pad_set_active (this->sinkpad, TRUE);
+  gst_omx_base_add_pad (GST_OMX_BASE (this), this->sinkpad);
+  gst_element_add_pad (GST_ELEMENT (this), this->sinkpad);
+
 }
 
 

@@ -1927,28 +1927,31 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
        * try to process any more buffers. */
     case GST_EVENT_EOS:
     {
-	  /* In some cases the EoS event arrives before we encode the
-	  * desired amount of frames using the num_buffers property we
-      *  can be sure that we will encode this amount of frames (i.e.snapshots)
-      */
+      /* In some cases the EoS event arrives before we encode the
+       * desired amount of frames using the num_buffers property we
+       *  can be sure that we will encode this amount of frames (i.e.snapshots)
+       */
+      GST_INFO_OBJECT (this, "EOS received");
+      if(this->num_buffers){
+	g_mutex_lock(this->num_buffers_mutex);
+	g_cond_wait(this->num_buffers_cond,this->num_buffers_mutex);
+	g_mutex_unlock(this->num_buffers_mutex);
+      }
 
-	  if(this->num_buffers){
-	    g_mutex_lock(this->num_buffers_mutex);
-	    g_cond_wait(this->num_buffers_cond,this->num_buffers_mutex);
-	    g_mutex_unlock(this->num_buffers_mutex);
-	  }
-      GST_INFO_OBJECT (this, "EOS received, flushing ports");
-      gst_omx_basedecoder_pause_push_task(this);
-      GST_OBJECT_LOCK (this);
-      this->flushing = TRUE;
-      GST_OBJECT_UNLOCK (this);
-      /*  DSP does not support flush ports */
-      if (!(this->audio_component)) {
-        error =
+      if(!this->flushing){
+	GST_INFO_OBJECT (this, "EOS received: flushing ports");
+	gst_omx_basedecoder_pause_push_task(this);
+	GST_OBJECT_LOCK (this);
+	this->flushing = TRUE;
+	GST_OBJECT_UNLOCK (this);
+	/*  DSP does not support flush ports */
+	if (!(this->audio_component)) {
+	  error =
             gst_omx_basedecoder_for_each_pad (this, gst_omx_basedecoder_flush_ports,
-            GST_PAD_UNKNOWN, NULL);
-        if (GST_OMX_FAIL (error))
-          goto noflush_eos;
+					      GST_PAD_UNKNOWN, NULL);
+	  if (GST_OMX_FAIL (error))
+	    goto noflush_eos;
+	}
       }
       break;
     }
@@ -2072,11 +2075,9 @@ cbfailed:
   
 timeout:
   {
-    GST_ELEMENT_ERROR (this, LIBRARY, SETTINGS, (NULL),
-        ("Cannot acquire output buffer from pending queue"));
+    GST_ERROR_OBJECT (this, "Cannot acquire output buffer from pending queue");
     return;
   }
-
 
 drop:
   {
@@ -2097,6 +2098,9 @@ gst_omx_basedecoder_pause_push_task (GstOmxBaseDecoder * this)
   OMX_ERRORTYPE error = OMX_ErrorNone;
 
   GST_INFO_OBJECT (this, "Pausing push task ");
+
+  gst_omx_buf_queue_release (this->queue_buffers, TRUE);
+
   if(!gst_task_pause(this->pushtask))
       GST_WARNING_OBJECT (this,"Failed to pause push task");
 
