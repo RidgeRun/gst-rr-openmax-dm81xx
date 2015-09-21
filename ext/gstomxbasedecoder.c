@@ -1940,10 +1940,13 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
 
       if(!this->flushing){
 	GST_INFO_OBJECT (this, "EOS received: flushing ports");
-	gst_omx_basedecoder_pause_push_task(this);
+
 	GST_OBJECT_LOCK (this);
 	this->flushing = TRUE;
 	GST_OBJECT_UNLOCK (this);
+
+	gst_omx_basedecoder_stop_push_task(this);
+	gst_omx_basedecoder_clear_queue_fill(this);
 	/*  DSP does not support flush ports */
 	if (!(this->audio_component)) {
 	  error =
@@ -1958,10 +1961,12 @@ gst_omx_basedecoder_event_handler (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_START:
     {
       GST_INFO_OBJECT (this, "Flush start received");
-      gst_omx_basedecoder_pause_push_task(this);
       GST_OBJECT_LOCK(this);
       this->flushing = TRUE;
       GST_OBJECT_UNLOCK (this);
+
+      gst_omx_basedecoder_pause_push_task(this);
+      gst_omx_basedecoder_clear_queue_fill(this);
 
       /*TODO: handle error*/
       GST_INFO_OBJECT (this, "Clearing buffers in queue");
@@ -2081,12 +2086,7 @@ timeout:
 
 drop:
   {
-    if(omx_buf){
-      GST_INFO_OBJECT (this, "Dropping buffer %s",gst_flow_get_name (this->fill_ret));
-    }
-    else{
-      GST_INFO_OBJECT (this, "Queue empty : %s",gst_flow_get_name (this->fill_ret));
-    }
+    GST_INFO_OBJECT (this, "Skipping flush task, state of the fill return: %s",gst_flow_get_name (this->fill_ret));
     return ;
   }
 }
