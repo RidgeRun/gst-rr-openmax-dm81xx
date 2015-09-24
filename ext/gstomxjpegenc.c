@@ -434,6 +434,7 @@ gst_omx_jpeg_enc_init_pads (GstOmxBase * base)
 
   tQualityFactor.nQFactor = this->quality;
 
+  g_mutex_lock (&_omx_mutex);
   error =
       OMX_SetParameter (GST_OMX_BASE (this)->handle,
       OMX_IndexParamQFactor, &tQualityFactor);
