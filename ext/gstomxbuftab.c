@@ -127,6 +127,7 @@ gst_omx_buf_tab_add_buffer (GstOmxBufTab * buftab,
     goto nomem;
 
   node->buffer = buffer;
+  node->phys_addr = buffer->pBuffer;
 
   g_mutex_lock (&buftab->tabmutex);
 

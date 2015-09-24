@@ -1120,7 +1120,7 @@ gst_omx_base_use_buffer (GstOmxBase * this, GList ** bufferlist,
   node = *bufferlist;
   omxpeerbuffer = ((GstOmxBufTabNode *) node->data)->buffer;
   *bufferlist = g_list_next (node);
-  *pbuffer = omxpeerbuffer->pBuffer;
+  *pbuffer = ((GstOmxBufTabNode *) node->data)->phys_addr;
   *size = omxpeerbuffer->nAllocLen;
 
   GST_LOG_OBJECT (this, "Using buffer %p->%p", omxpeerbuffer, pbuffer);

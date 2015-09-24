@@ -42,6 +42,7 @@ struct _GstOmxBufTab
 struct _GstOmxBufTabNode
 {
   OMX_BUFFERHEADERTYPE *buffer;
+  gpointer phys_addr;
   gboolean busy;
 };
 
