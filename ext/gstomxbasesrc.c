@@ -166,7 +166,6 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   this->peer_alloc = FALSE;
   this->flushing = FALSE;
   this->started = FALSE;
-  this->first_buffer = TRUE;
   this->interlaced = FALSE;
   this->first_field = TRUE;
 
@@ -569,7 +568,7 @@ gst_omx_base_src_stop (GstOmxBaseSrc * this)
   GST_OBJECT_LOCK (this);
   this->flushing = FALSE;
   this->started = FALSE;
-  this->first_buffer = TRUE;
+  this->first_field = TRUE;
   this->create_ret = FALSE;
   GST_OBJECT_UNLOCK (this);
 
@@ -1292,25 +1291,27 @@ gst_omx_base_src_fill_callback (OMX_HANDLETYPE handle,
   flushing = this->flushing;
   GST_OBJECT_UNLOCK (this);
 
-  if (this->first_field && this->interlaced){
-    nFlags = outbuf->nFlags;
-    GST_INFO_OBJECT (this, "Check flags %p", nFlags);
-    this->first_field = FALSE;
-    gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
-    if ((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == BOTTOM_FIELD_FLAG){
-      GST_INFO_OBJECT (this, "Discard bottom field, check val %p", 
-      outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT);
-      goto drop;
+  GST_INFO_OBJECT (this, "Check flags %p", outbuf->nFlags);
+
+  if (this->interlaced) {
+    if (this->first_field){
+      nFlags = outbuf->nFlags;
+      GST_INFO_OBJECT (this, "Check flags %p", outbuf->nFlags);
+      this->first_field = FALSE;
+      gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
+      if ((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == BOTTOM_FIELD_FLAG){
+	GST_INFO_OBJECT (this, "Discard bottom field, check val %p", 
+			 outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT);
+	goto drop;
+      }
+    } else {
+      if((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == gst_omx_base_src_last_flag){
+	GST_INFO_OBJECT (this, "Discard field not in sync, check val %p", outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT); 
+	goto drop;
+      }
+      gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
     }
-  }
-  
-  if(!this->first_field && this->interlaced) {
-    if((outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT) == gst_omx_base_src_last_flag){
-      goto drop;
-    }
-    gst_omx_base_src_last_flag = outbuf->nFlags >> FIELD_TYPE_FLAG_SHIFT;
-  }
-  
+  }  
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
 
   if (busy)

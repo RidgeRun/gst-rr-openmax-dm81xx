@@ -64,7 +64,6 @@ struct _GstOmxBaseSrc
   gboolean peer_alloc;
   gboolean flushing;
   gboolean started;
-  gboolean first_buffer;
   gboolean interlaced;
   gboolean first_field;
 
