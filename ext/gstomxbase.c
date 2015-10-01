@@ -676,7 +676,7 @@ nofreebuffer:
     gst_element_post_message (this,
 			      gst_message_new_application (GST_OBJECT (this),
 							   gst_structure_new ("no-free-buffer", NULL)));
-    return GST_FLOW_WRONG_STATE;
+    return GST_FLOW_ERROR;
   }
 noempty:
   {
