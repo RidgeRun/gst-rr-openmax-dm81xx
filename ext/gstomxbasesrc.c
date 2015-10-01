@@ -870,8 +870,7 @@ gst_omx_base_src_create (GstPushSrc * src, GstBuffer ** buf)
 
   if (!this->started) {
     this->running_time = abs_time - base_time;
-    if (!this->running_time)
-      this->running_time = timestamp;
+
     this->omx_delay = timestamp - this->running_time;
 
     GST_DEBUG_OBJECT (this, "OMX delay %" G_GINT64_FORMAT, this->omx_delay);
