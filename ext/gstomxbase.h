@@ -75,9 +75,6 @@ struct _GstOmxBase
   GMutex waitmutex;
   GCond waitcond;
 
-  /*Conditions for Paused State */
-  GMutex pushwaitmutex;
-
   GstFlowReturn fill_ret;
 
   gboolean wait_keyframe;
