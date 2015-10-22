@@ -118,18 +118,17 @@ omx_init (GstPlugin * omx)
     return FALSE;
 
   if (!gst_element_register (omx, "omx_noisefilter", GST_RANK_NONE,
-			     GST_TYPE_OMX_NOISE_FILTER))
+          GST_TYPE_OMX_NOISE_FILTER))
     return FALSE;
-  
+
   if (!gst_element_register (omx, "omxbufferalloc", GST_RANK_NONE,
           GST_TYPE_OMXBUFFERALLOC))
     return FALSE;
 
- if (!gst_element_register (omx, "perf", GST_RANK_NONE,
-          GST_TYPE_PERF))
+  if (!gst_element_register (omx, "perf", GST_RANK_NONE, GST_TYPE_PERF))
     return FALSE;
-  
-return TRUE;
+
+  return TRUE;
 }
 
 /* gstreamer looks for this structure to register omxs

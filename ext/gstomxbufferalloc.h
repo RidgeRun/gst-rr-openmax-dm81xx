@@ -30,7 +30,6 @@
 #include <ti/syslink/utils/IHeap.h>
 
 G_BEGIN_DECLS
-
 #define GST_TYPE_OMXBUFFERALLOC \
   (gst_omx_buffer_alloc_get_type())
 #define GST_OMXBUFFERALLOC(obj) \
@@ -41,8 +40,7 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMXBUFFERALLOC))
 #define GST_IS_OMXBUFFERALLOC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMXBUFFERALLOC))
-
-typedef struct _GstOmxBufferAlloc      GstOmxBufferAlloc;
+typedef struct _GstOmxBufferAlloc GstOmxBufferAlloc;
 typedef struct _GstOmxBufferAllocClass GstOmxBufferAllocClass;
 
 struct _GstOmxBufferAlloc
@@ -73,5 +71,4 @@ GType gst_omx_buffer_alloc_get_type (void);
 #define GST_OMX_BUFFER_FLAG (GST_BUFFER_FLAG_LAST << 0)
 
 G_END_DECLS
-
 #endif /* __GST_OMXBUFFERALLOC_H__ */

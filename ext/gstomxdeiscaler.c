@@ -141,6 +141,7 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -157,12 +158,17 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gstelement_class->release_pad =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_release_pad);
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src0_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src1_template));
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&src0_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&src1_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_deiscaler_set_property;
   gobject_class->get_property = gst_omx_deiscaler_get_property;
@@ -324,7 +330,7 @@ gst_omx_deiscaler_set_property (GObject * object, guint prop_id,
           &this->crop_area);
       break;
     case PROP_JOINED_FIELDS:
-      base->joined_fields = g_value_get_boolean(value);
+      base->joined_fields = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -338,7 +344,7 @@ gst_omx_deiscaler_get_property (GObject * object, guint prop_id,
 {
   GstOmxDeiscaler *this = GST_OMX_DEISCALER (object);
   GstOmxBase *base = GST_OMX_BASE (this);
-  
+
   switch (prop_id) {
     case PROP_RATE_DIV:
       g_value_set_uint (value, this->framerate_divisor);
@@ -394,9 +400,11 @@ gst_omx_deiscaler_request_new_pad (GstElement * element, GstPadTemplate * templ,
     name = gst_pad_get_name (l->data);
     if (strcmp (name, templ->name_template) == 0) {
       srcpad = l->data;
+      g_free (name);
       break;
     }
   }
+  g_free (name);
   if (srcpad == NULL)
     goto nosrcpad;
 
@@ -561,6 +569,7 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
 
       if (!gst_pad_set_caps (srcpad, newcaps))
         goto nosetcaps;
+      gst_caps_unref (newcaps);
     } else {
       gst_object_set_parent (GST_OBJECT_CAST (srcpad), GST_OBJECT_CAST (this));
       *out_format = this->in_format;
@@ -850,7 +859,7 @@ gst_omx_deiscaler_fill_callback (GstOmxBase * base,
   /*  The deinterlacer has an issue where the first buffer is return without being correctly filled */
   /*  we need to drop the first incoming buffer in order to keep our playback clean */
 
-  if (base->interlaced && (this->drop_count < 2)){
+  if (base->interlaced && (this->drop_count < 2)) {
     this->drop_count++;
     gst_omx_base_release_buffer (outbuf);
     return ret;

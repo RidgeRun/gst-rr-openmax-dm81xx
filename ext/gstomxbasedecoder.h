@@ -40,8 +40,8 @@ G_BEGIN_DECLS
 typedef struct _GstOmxBaseDecoder GstOmxBaseDecoder;
 typedef struct _GstOmxBaseDecoderClass GstOmxBaseDecoderClass;
 
-typedef OMX_ERRORTYPE (*GstOmxBaseDecoderPadFunc) (GstOmxBaseDecoder *, GstOmxPad *,
-    gpointer);
+typedef OMX_ERRORTYPE (*GstOmxBaseDecoderPadFunc) (GstOmxBaseDecoder *,
+    GstOmxPad *, gpointer);
 
 struct _GstOmxBaseDecoder
 {
@@ -59,8 +59,8 @@ struct _GstOmxBaseDecoder
 
   guint num_buffers;
   guint cont;
-  GCond *num_buffers_cond;
-  GMutex *num_buffers_mutex;
+  GCond num_buffers_cond;
+  GMutex num_buffers_mutex;
 
   gboolean peer_alloc;
   gboolean flushing;
@@ -74,11 +74,11 @@ struct _GstOmxBaseDecoder
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
-  
-  /*Conditions for Paused State*/
+
+  /*Conditions for Paused State */
   GMutex stream_mutex;
 
-  /* Queue of buffers pushed on the output*/
+  /* Queue of buffers pushed on the output */
   GstOmxBufQueue *queue_buffers;
   GstTask *pushtask;
   GStaticRecMutex taskmutex;
@@ -102,8 +102,10 @@ struct _GstOmxBaseDecoderClass
 
     OMX_ERRORTYPE (*omx_event) (GstOmxBaseDecoder *, OMX_EVENTTYPE, guint32,
       guint32, gpointer);
-    GstFlowReturn (*omx_fill_buffer) (GstOmxBaseDecoder *, OMX_BUFFERHEADERTYPE *);
-    GstFlowReturn (*omx_empty_buffer) (GstOmxBaseDecoder *, OMX_BUFFERHEADERTYPE *);
+    GstFlowReturn (*omx_fill_buffer) (GstOmxBaseDecoder *,
+      OMX_BUFFERHEADERTYPE *);
+    GstFlowReturn (*omx_empty_buffer) (GstOmxBaseDecoder *,
+      OMX_BUFFERHEADERTYPE *);
     OMX_ERRORTYPE (*init_ports) (GstOmxBaseDecoder *);
     gboolean (*parse_caps) (GstPad *, GstCaps *);
   GstCaps *(*parse_buffer) (GstOmxBaseDecoder *, GstBuffer *);
@@ -116,8 +118,10 @@ gboolean gst_omx_basedecoder_add_pad (GstOmxBaseDecoder *, GstPad *);
 typedef gboolean (*GstOmxBaseDecoderCondition) (gpointer, gpointer);
 gboolean gst_omx_basedecoder_condition_state (gpointer targetstate,
     gpointer currentstate);
-gboolean gst_omx_basedecoder_condition_enabled (gpointer enabled, gpointer dummy);
-gboolean gst_omx_basedecoder_condition_disabled (gpointer enabled, gpointer dummy);
+gboolean gst_omx_basedecoder_condition_enabled (gpointer enabled,
+    gpointer dummy);
+gboolean gst_omx_basedecoder_condition_disabled (gpointer enabled,
+    gpointer dummy);
 
 OMX_ERRORTYPE gst_omx_basedecoder_wait_for_condition (GstOmxBaseDecoder *,
     GstOmxBaseDecoderCondition, gpointer, gpointer);

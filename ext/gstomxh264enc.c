@@ -202,6 +202,7 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -213,11 +214,13 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
       "RidgeRun's OMX based H264 encoder",
       "Eugenia Guzman <eugenia.guzman@ridgerun.com>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
   gobject_class->set_property = gst_omx_h264_enc_set_property;
   gobject_class->get_property = gst_omx_h264_enc_get_property;
 
@@ -385,10 +388,10 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       return;
     }
 
-    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
-        targetBitRate = this->bitrate;
-    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
-        intraFrameInterval = this->i_period;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.
+        videnc2DynamicParams.targetBitRate = this->bitrate;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.
+        videnc2DynamicParams.intraFrameInterval = this->i_period;
     error_val =
         OMX_SetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
         &tDynParams);
@@ -512,6 +515,8 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
+
   return TRUE;
 
 invalidcaps:
@@ -597,7 +602,7 @@ gst_omx_h264_enc_init_pads (GstOmxBase * base)
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
   if (this->is_interlaced)
-	port->format.video.nFrameHeight = this->format.height * 0.5;
+    port->format.video.nFrameHeight = this->format.height * 0.5;
 
   port->format.video.nStride = this->format.width;
   port->format.video.xFramerate =
@@ -904,29 +909,29 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
 
     /* for interlace, base profile can not be used */
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        videnc2Params.encodingPreset = XDM_USER_DEFINED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        encodingPreset = XDM_USER_DEFINED;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
         IH264_HIGH_PROFILE;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.level =
         IH264_LEVEL_42;
 
     /* setting Interlace mode */
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        videnc2Params.inputContentType = IVIDEO_INTERLACED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        inputContentType = IVIDEO_INTERLACED;
     tStaticParam.videoStaticParams.h264EncStaticParams.bottomFieldIntra = 0;
     tStaticParam.videoStaticParams.h264EncStaticParams.interlaceCodingType =
         IH264_INTERLACE_FIELDONLY_ARF;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        videnc2Params.encodingPreset = XDM_DEFAULT;
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        videnc2Params.rateControlPreset = IVIDEO_STORAGE;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        encodingPreset = XDM_DEFAULT;
+    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+        rateControlPreset = IVIDEO_STORAGE;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        intraCodingParams.lumaIntra4x4Enable = 0x1f;
-    tStaticParam.videoStaticParams.h264EncStaticParams.
-        intraCodingParams.lumaIntra8x8Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
+        lumaIntra4x4Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
+        lumaIntra8x8Enable = 0x1f;
 
     g_mutex_lock (&_omx_mutex);
     error =
@@ -939,27 +944,30 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     OMX_VIDEO_PARAM_FRAMEDATACONTENTTYPE tFramDataContentType;
 
     GST_DEBUG_OBJECT (this, "Setting frame format");
-	GST_OMX_INIT_STRUCT (&tFramDataContentType, OMX_VIDEO_PARAM_FRAMEDATACONTENTTYPE);
-	tFramDataContentType.nPortIndex = 1;
+    GST_OMX_INIT_STRUCT (&tFramDataContentType,
+        OMX_VIDEO_PARAM_FRAMEDATACONTENTTYPE);
+    tFramDataContentType.nPortIndex = 1;
 
-	g_mutex_lock (&_omx_mutex);
-	OMX_GetParameter (base->handle,
-		(OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings, &tFramDataContentType);
-	g_mutex_unlock (&_omx_mutex);
+    g_mutex_lock (&_omx_mutex);
+    OMX_GetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings,
+        &tFramDataContentType);
+    g_mutex_unlock (&_omx_mutex);
 
-	if (this->field_merged)
-		tFramDataContentType.eFrameFormat = OMX_Video_Format_Frame;
-	else
-		tFramDataContentType.eFrameFormat = OMX_Video_Format_Field;
+    if (this->field_merged)
+      tFramDataContentType.eFrameFormat = OMX_Video_Format_Frame;
+    else
+      tFramDataContentType.eFrameFormat = OMX_Video_Format_Field;
 
-	g_mutex_lock (&_omx_mutex);
-	error =
-	  OMX_SetParameter (base->handle,
-	  (OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings, &tFramDataContentType);
-	g_mutex_unlock (&_omx_mutex);
-	if (GST_OMX_FAIL (error)) {
-		goto nointerlaced;
-	}
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (base->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexParamVideoFrameDataContentSettings,
+        &tFramDataContentType);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      goto nointerlaced;
+    }
   }
 
   return error;

@@ -81,6 +81,7 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
 {
   GstElementClass *gstelement_class;
   GstOmxBaseDecoderClass *gstomxbasedecoder_class;
+  GstPadTemplate *template;
 
   gstelement_class = (GstElementClass *) klass;
   gstomxbasedecoder_class = GST_OMX_BASEDECODER_CLASS (klass);
@@ -91,15 +92,20 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
       "RidgeRun's OMX based H264 decoder",
       "Carlos Gomez <carlos.gomez@ridgerun.com>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
-  gstomxbasedecoder_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  gstomxbasedecoder_class->parse_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
   gstomxbasedecoder_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_h264_dec_fill_callback);
-  gstomxbasedecoder_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_init_pads);
+  gstomxbasedecoder_class->init_ports =
+      GST_DEBUG_FUNCPTR (gst_omx_h264_dec_init_pads);
 
   gstomxbasedecoder_class->handle_name = "OMX.TI.DUCATI.VIDDEC";
 
@@ -218,7 +224,7 @@ gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps)
 
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
-
+  gst_caps_unref (newcaps);
   return TRUE;
 
 invalidcaps:
@@ -359,13 +365,12 @@ gst_omx_h264_dec_fill_callback (GstOmxBaseDecoder * base,
 
   GST_LOG_OBJECT (this, "Pushing buffer %p->%p to %s:%s",
       outbuf, outbuf->pBuffer, GST_DEBUG_PAD_NAME (this->srcpad));
-  
+
   g_mutex_lock (&base->stream_mutex);
   ret = gst_pad_push (this->srcpad, buffer);
-  g_mutex_unlock (&base->stream_mutex); 
+  g_mutex_unlock (&base->stream_mutex);
 
-  GST_LOG_OBJECT (this, " Buffer %p->%p  pushed",
-      outbuf, outbuf->pBuffer);
+  GST_LOG_OBJECT (this, " Buffer %p->%p  pushed", outbuf, outbuf->pBuffer);
 
   if (GST_FLOW_OK != ret)
     goto nopush;
@@ -376,13 +381,13 @@ noalloc:
   {
     GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
         ("Unable to allocate buffer to push"), (NULL));
-    gst_omx_basedecoder_release_buffer((gpointer) outbuf);
+    gst_omx_basedecoder_release_buffer ((gpointer) outbuf);
     return GST_FLOW_ERROR;
   }
 nocaps:
   {
     GST_ERROR_OBJECT (this, "Unable to provide the requested caps");
-    gst_omx_basedecoder_release_buffer((gpointer) outbuf);
+    gst_omx_basedecoder_release_buffer ((gpointer) outbuf);
     return GST_FLOW_NOT_NEGOTIATED;
   }
 nopush:

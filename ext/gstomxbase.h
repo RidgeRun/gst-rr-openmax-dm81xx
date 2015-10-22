@@ -59,8 +59,8 @@ struct _GstOmxBase
 
   guint num_buffers;
   guint cont;
-  GCond *num_buffers_cond;
-  GMutex *num_buffers_mutex;
+  GCond num_buffers_cond;
+  GMutex num_buffers_mutex;
 
   gboolean peer_alloc;
   gboolean flushing;
@@ -74,8 +74,8 @@ struct _GstOmxBase
   OMX_STATETYPE state;
   GMutex waitmutex;
   GCond waitcond;
-  
-  /*Conditions for Paused State*/
+
+  /*Conditions for Paused State */
   GMutex pushwaitmutex;
 
   GstFlowReturn fill_ret;

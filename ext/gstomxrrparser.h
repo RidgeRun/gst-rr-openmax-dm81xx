@@ -51,7 +51,6 @@
 #include <gst/gst.h>
 
 G_BEGIN_DECLS
-
 /* #defines don't like whitespacey bits */
 #define GST_TYPE_RRPARSER \
   (gst_rrparser_get_type())
@@ -63,8 +62,7 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RRPARSER))
 #define GST_IS_RRPARSER_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RRPARSER))
-
-typedef struct _GstRRParser      GstRRParser;
+typedef struct _GstRRParser GstRRParser;
 typedef struct _GstRRParserClass GstRRParserClass;
 
 struct _GstRRParser
@@ -89,5 +87,4 @@ struct _GstRRParserClass
 GType gst_rrparser_get_type (void);
 
 G_END_DECLS
-
 #endif /* __GST_RRPARSER_H__ */

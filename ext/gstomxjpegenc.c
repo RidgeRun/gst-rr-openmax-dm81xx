@@ -51,8 +51,7 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("image/jpeg,"
-        "width=[16,4096]," "height=[16,4096],"
-        "framerate=" GST_VIDEO_FPS_RANGE)
+        "width=[16,4096]," "height=[16,4096]," "framerate=" GST_VIDEO_FPS_RANGE)
     );
 
 enum
@@ -85,6 +84,7 @@ gst_omx_jpeg_enc_class_init (GstOmxJpegEncClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -96,25 +96,28 @@ gst_omx_jpeg_enc_class_init (GstOmxJpegEncClass * klass)
       "RidgeRun's OMX based JPEG encoder",
       "Diego Solano <diego.solano@ridgerun.com>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_jpeg_enc_set_property;
   gobject_class->get_property = gst_omx_jpeg_enc_get_property;
 
   g_object_class_install_property (gobject_class, PROP_QUALITY,
-        g_param_spec_uint ("quality", "MJPEG/JPEG quality",
-            "MJPEG/JPEG quality (integer 0:min 100:max)",
-            0, 100, GST_OMX_JPEG_ENC_QUALITY_DEFAULT, G_PARAM_READWRITE));
+      g_param_spec_uint ("quality", "MJPEG/JPEG quality",
+          "MJPEG/JPEG quality (integer 0:min 100:max)",
+          0, 100, GST_OMX_JPEG_ENC_QUALITY_DEFAULT, G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_jpeg_enc_set_caps);
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_jpeg_enc_fill_callback);
   gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_jpeg_enc_init_pads);
 
-  gstomxbase_class->handle_name = "OMX.TI.DUCATI.VIDENC"; //TODO: change here the omx component
+  gstomxbase_class->handle_name = "OMX.TI.DUCATI.VIDENC";       //TODO: change here the omx component
 
   /* debug category for filtering log messages */
   GST_DEBUG_CATEGORY_INIT (gst_omx_jpeg_enc_debug, "omx_jpegenc",
@@ -159,7 +162,7 @@ gst_omx_jpeg_enc_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
 
-	case PROP_QUALITY:
+    case PROP_QUALITY:
       this->quality = g_value_get_uint (value);
       GST_INFO_OBJECT (this, "Setting quality to %d", this->quality);
       break;
@@ -178,8 +181,8 @@ gst_omx_jpeg_enc_get_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
 
-	case PROP_QUALITY:
-	  g_value_set_uint (value, this->quality);
+    case PROP_QUALITY:
+      g_value_set_uint (value, this->quality);
       break;
 
     default:
@@ -257,6 +260,8 @@ gst_omx_jpeg_enc_set_caps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
+
   return TRUE;
 
 invalidcaps:
@@ -284,7 +289,7 @@ gst_omx_jpeg_enc_init_pads (GstOmxBase * base)
   OMX_IMAGE_PARAM_QFACTORTYPE tQualityFactor;
 
 
-    /* PADS and PORTS initialization for OMX_COMPONENT  */
+  /* PADS and PORTS initialization for OMX_COMPONENT  */
 
 
   GST_INFO_OBJECT (this, "Initializing sink pad memory");
@@ -368,7 +373,7 @@ gst_omx_jpeg_enc_init_pads (GstOmxBase * base)
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
       this->format.framerate_den) << 16;
-  port->format.video.nBitrate = 500000;	//TODO: testing value only
+  port->format.video.nBitrate = 500000; //TODO: testing value only
   port->format.video.eCompressionFormat = OMX_VIDEO_CodingMJPEG;
 
   g_mutex_lock (&_omx_mutex);
@@ -415,25 +420,23 @@ gst_omx_jpeg_enc_init_pads (GstOmxBase * base)
   if (GST_OMX_FAIL (error))
     goto noenable;
 
-	GST_INFO_OBJECT (this, "Ports enabled ok");
+  GST_INFO_OBJECT (this, "Ports enabled ok");
 
 
   /* SETTING QUALITY PROPERTY TO OMX_COMPONENT */
 
   GST_OMX_INIT_STRUCT (&tQualityFactor, OMX_IMAGE_PARAM_QFACTORTYPE);
 
-  GST_INFO_OBJECT (this, "Initial QFactor %d",
-                       (gint)tQualityFactor.nQFactor);
-                       
+  GST_INFO_OBJECT (this, "Initial QFactor %d", (gint) tQualityFactor.nQFactor);
+
   tQualityFactor.nPortIndex = 1;
-  
+
   g_mutex_lock (&_omx_mutex);
   OMX_GetParameter (base->handle,
       (OMX_INDEXTYPE) OMX_IndexParamQFactor, &tQualityFactor);
   g_mutex_unlock (&_omx_mutex);
 
-  GST_INFO_OBJECT (this, "Got QFactor %d",
-                       (gint)tQualityFactor.nQFactor);
+  GST_INFO_OBJECT (this, "Got QFactor %d", (gint) tQualityFactor.nQFactor);
 
   tQualityFactor.nQFactor = this->quality;
 
@@ -450,11 +453,10 @@ gst_omx_jpeg_enc_init_pads (GstOmxBase * base)
   g_mutex_unlock (&_omx_mutex);
 
   GST_INFO_OBJECT (this, "Exit setup QFactor %d",
-                       (gint)tQualityFactor.nQFactor);
+      (gint) tQualityFactor.nQFactor);
 
   if (error == OMX_ErrorUnsupportedIndex) {
-    GST_WARNING_OBJECT (this,
-        "Setting quality not supported by component");
+    GST_WARNING_OBJECT (this, "Setting quality not supported by component");
   }
 
   return error;
@@ -489,9 +491,10 @@ gst_omx_jpeg_enc_fill_callback (GstOmxBase * base,
 
   GST_INFO_OBJECT (this, "JPEG Encoder Fill buffer callback");
 
-	GST_INFO_OBJECT (this, "______________GOT OMX BUFFER FROM COMPONENT omx_buffer=%p size=%lu, len=%lu, flags=%lu, offset=%lu, timestamp=%lld",
-                outbuf, outbuf->nAllocLen, outbuf->nFilledLen, outbuf->nFlags,
-                outbuf->nOffset, outbuf->nTimeStamp);
+  GST_INFO_OBJECT (this,
+      "______________GOT OMX BUFFER FROM COMPONENT omx_buffer=%p size=%lu, len=%lu, flags=%lu, offset=%lu, timestamp=%lld",
+      outbuf, outbuf->nAllocLen, outbuf->nFilledLen, outbuf->nFlags,
+      outbuf->nOffset, outbuf->nTimeStamp);
 
   caps = gst_pad_get_negotiated_caps (this->srcpad);
   if (!caps)
@@ -545,5 +548,3 @@ nopush:
     return ret;
   }
 }
-
-

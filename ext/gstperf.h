@@ -29,7 +29,6 @@
 #include <gst/base/gstbasetransform.h>
 
 G_BEGIN_DECLS
-
 /* Standard macros for maniuplating perf objects */
 #define GST_TYPE_PERF \
   (gst_perf_get_type())
@@ -41,17 +40,16 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_PERF))
 #define GST_IS_PERF_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_PERF))
-
-typedef struct _Gstperf      Gstperf;
+typedef struct _Gstperf Gstperf;
 typedef struct _GstperfClass GstperfClass;
 
 /* _Gstperf object */
 struct _Gstperf
 {
   /* gStreamer infrastructure */
-  GstBaseTransform  element;
-  GstPad            *sinkpad;
-  GstPad            *srcpad;
+  GstBaseTransform element;
+  GstPad *sinkpad;
+  GstPad *srcpad;
 
   /* statistics */
   guint64 frames_count, last_frames_count, total_size;
@@ -61,23 +59,20 @@ struct _Gstperf
   GstClockTime interval_ts;
 
   gboolean print_fps, print_arm_load, fps_update_interval;
-  unsigned long int  total;
-  unsigned long int  prevTotal;
+  unsigned long int total;
+  unsigned long int prevTotal;
   unsigned long int userTime;
-  unsigned long int  prevuserTime;
+  unsigned long int prevuserTime;
 };
 
 /* _GstperfClass object */
 struct _GstperfClass
 {
-  GstBaseTransformClass  parent_class;
+  GstBaseTransformClass parent_class;
 };
 
 /* External function enclarations */
-GType gst_perf_get_type(void);
+GType gst_perf_get_type (void);
 
 G_END_DECLS
-
 #endif /* __GST_PERF_H__ */
-
-

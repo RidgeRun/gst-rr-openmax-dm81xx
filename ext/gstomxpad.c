@@ -39,8 +39,8 @@ static void gst_omx_init_port_default (OMX_PARAM_PORTDEFINITIONTYPE *,
 GstOmxPad *
 gst_omx_pad_new_from_template (GstPadTemplate * templ, const gchar * name)
 {
- g_return_val_if_fail (GST_IS_PAD_TEMPLATE (templ), NULL);
- 
+  g_return_val_if_fail (GST_IS_PAD_TEMPLATE (templ), NULL);
+
   return g_object_new (TYPE_GST_OMX_PAD,
       "name", name, "template", templ, "direction", templ->direction, NULL);
 }

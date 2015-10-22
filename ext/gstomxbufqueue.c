@@ -121,7 +121,7 @@ gst_omx_buf_queue_pop_buffer_check_release (GstOmxBufQueue * bufqueue)
   g_mutex_lock (&bufqueue->queuemutex);
 retry:
 
-  while (g_queue_is_empty (bufqueue->queue) && !bufqueue->release ) {
+  while (g_queue_is_empty (bufqueue->queue) && !bufqueue->release) {
     if (!g_cond_wait_until (&bufqueue->queuecond, &bufqueue->queuemutex,
             endtime))
       goto timeout;
@@ -151,7 +151,7 @@ gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue, gboolean release)
 
   error = OMX_ErrorNone;
   g_mutex_lock (&bufqueue->queuemutex);
-  bufqueue->release=release;
+  bufqueue->release = release;
   g_cond_signal (&bufqueue->queuecond);
   g_mutex_unlock (&bufqueue->queuemutex);
 
@@ -164,15 +164,17 @@ OMX_ERRORTYPE
 gst_omx_buf_queue_free (GstOmxBufQueue * bufqueue)
 {
   OMX_ERRORTYPE error;
-  /*Add check of errors?*/
+  /*Add check of errors? */
   g_return_val_if_fail (bufqueue, OMX_ErrorBadParameter);
 
   error = OMX_ErrorNone;
   g_mutex_lock (&bufqueue->queuemutex);
-  g_queue_free(bufqueue->queue);
+  g_queue_free (bufqueue->queue);
   g_mutex_unlock (&bufqueue->queuemutex);
+  g_mutex_clear (&bufqueue->queuemutex);
+  g_cond_clear (&bufqueue->queuecond);
 
   g_free (bufqueue);
- exit:
+exit:
   return error;
 }
