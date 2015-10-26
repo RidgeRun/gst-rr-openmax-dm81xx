@@ -403,8 +403,8 @@ gst_omx_deiscaler_request_new_pad (GstElement * element, GstPadTemplate * templ,
       g_free (name);
       break;
     }
+    g_free (name);
   }
-  g_free (name);
   if (srcpad == NULL)
     goto nosrcpad;
 
