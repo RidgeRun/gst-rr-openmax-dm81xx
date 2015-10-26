@@ -507,6 +507,7 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
   return TRUE;
 
 invalidcaps:

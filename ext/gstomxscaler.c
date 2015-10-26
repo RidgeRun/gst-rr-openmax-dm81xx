@@ -88,6 +88,7 @@ gst_omx_scaler_class_init (GstOmxScalerClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -99,10 +100,15 @@ gst_omx_scaler_class_init (GstOmxScalerClass * klass)
       "RidgeRun's OMX based scaler",
       "Michael Gruner <michael.gruner@ridgerun.com>");
 
+  template = gst_static_pad_template_get (&src_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
+      template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+      template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_scaler_set_property;
   gobject_class->get_property = gst_omx_scaler_get_property;
@@ -364,6 +370,8 @@ gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
+  
   return TRUE;
 
 invalidcaps:

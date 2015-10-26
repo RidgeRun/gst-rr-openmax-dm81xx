@@ -139,6 +139,7 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -155,12 +156,20 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
   gstelement_class->release_pad =
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_release_pad);
 
+  template = gst_static_pad_template_get (&sink_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src0_template));
+      template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&src0_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src1_template));
+      template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&src1_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+      template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_deiscaler_set_property;
   gobject_class->get_property = gst_omx_deiscaler_get_property;
@@ -381,8 +390,10 @@ gst_omx_deiscaler_request_new_pad (GstElement * element, GstPadTemplate * templ,
     name = gst_pad_get_name (l->data);
     if (strcmp (name, templ->name_template) == 0) {
       srcpad = l->data;
+      g_free(name);
       break;
     }
+    g_free(name);
   }
   if (srcpad == NULL)
     goto nosrcpad;
@@ -548,6 +559,7 @@ gst_omx_deiscaler_set_caps (GstPad * pad, GstCaps * caps)
 
       if (!gst_pad_set_caps (srcpad, newcaps))
         goto nosetcaps;
+      gst_caps_unref (newcaps);
     } else {
       gst_object_set_parent (GST_OBJECT_CAST (srcpad), GST_OBJECT_CAST (this));
       *out_format = this->in_format;
