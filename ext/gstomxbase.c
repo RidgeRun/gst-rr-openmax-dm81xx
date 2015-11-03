@@ -594,7 +594,7 @@ return before we check if the buffer is interlaced */
     /* FilledLen calculated to achive the sencond field chroma position 
      * to be at 2/3 of the buffer size */
     omxbuf->nFilledLen =
-        (((GST_BUFFER_SIZE (buf)) * 3) >> 2) - omxpeerbuf->nOffset;
+        ((omxpeerbuf->nFilledLen * 3) >> 2) - omxpeerbuf->nOffset;
     omxbuf->nOffset = omxpeerbuf->nOffset;
     omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
