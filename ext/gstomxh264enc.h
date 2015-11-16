@@ -62,6 +62,7 @@ struct _GstOmxH264Enc
   OMX_VIDEO_ENCODING_MODE_PRESETTYPE encodingPreset;
   OMX_VIDEO_RATECONTROL_PRESETTYPE rateControlPreset;
   gint cont;
+  guint b_frames;
 };
 
 struct _GstOmxH264EncClass

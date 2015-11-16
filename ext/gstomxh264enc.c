@@ -67,6 +67,7 @@ enum
   PROP_NEXT_IDR,
   PROP_PRESET,
   PROP_RATE_CTRL,
+  PROP_BFRAMES
 };
 
 #define GST_OMX_H264_ENC_BITRATE_DEFAULT	500000
@@ -78,6 +79,7 @@ enum
 #define GST_OMX_H264_ENC_NEXT_IDR_DEFAULT	FALSE
 #define GST_OMX_H264_ENC_PRESET_DEFAULT		OMX_Video_Enc_High_Speed_Med_Quality
 #define GST_OMX_H264_ENC_RATE_CTRL_DEFAULT	OMX_Video_RC_Low_Delay
+#define GST_OMX_H264_ENC_B_FRAMES			0
 
 #define GST_TYPE_OMX_VIDEO_AVCPROFILETYPE (gst_omx_h264_enc_profile_get_type ())
 static GType
@@ -265,6 +267,10 @@ gst_omx_h264_enc_class_init (GstOmxH264EncClass * klass)
           "Specifies what rate control preset to use",
           GST_TYPE_OMX_VIDEO_RATECONTROL_PRESETTYPE,
           GST_OMX_H264_ENC_RATE_CTRL_DEFAULT, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_BFRAMES,
+      g_param_spec_uint ("b_frames", "B Frames",
+          "Specifies the number of B frames",
+          0, 6, GST_OMX_H264_ENC_B_FRAMES, G_PARAM_READWRITE));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_enc_set_caps);
   gstomxbase_class->omx_fill_buffer =
@@ -299,6 +305,7 @@ gst_omx_h264_enc_init (GstOmxH264Enc * this)
   this->cont = 0;
   this->is_interlaced = FALSE;
   this->field_merged = FALSE;
+  this->b_frames = GST_OMX_H264_ENC_B_FRAMES;
 
   /* Add pads */
   this->sinkpad =
@@ -366,6 +373,11 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       this->rateControlPreset = g_value_get_enum (value);
       GST_INFO_OBJECT (this, "Setting the rate control preset to %d",
           this->rateControlPreset);
+      break;
+    case PROP_BFRAMES:
+      this->b_frames = g_value_get_uint (value);
+      GST_INFO_OBJECT (this, "Setting B frames to %d",
+          this->b_frames);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -436,6 +448,9 @@ gst_omx_h264_enc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_RATE_CTRL:
       g_value_set_enum (value, this->rateControlPreset);
+      break;
+    case PROP_BFRAMES:
+      g_value_set_uint (value, this->b_frames);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -863,7 +878,7 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
   AVCParams.eProfile = this->profile;
   AVCParams.eLevel = this->level;
   AVCParams.nPFrames = this->i_period - 1;
-  AVCParams.nBFrames = 0;
+  AVCParams.nBFrames = this->b_frames;
 
   g_mutex_lock (&_omx_mutex);
   error =
@@ -968,6 +983,41 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     if (GST_OMX_FAIL (error)) {
       goto nointerlaced;
     }
+  }
+  else {
+	if (this->b_frames) {
+
+		OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
+
+		GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
+
+		tStaticParam.nPortIndex = 1;
+
+		g_mutex_lock (&_omx_mutex);
+		OMX_GetParameter (base->handle,
+			(OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+		g_mutex_unlock (&_omx_mutex);
+
+		if (OMX_VIDEO_AVCProfileHigh == this->profile)
+			tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
+				IH264_HIGH_PROFILE;
+		else if (OMX_VIDEO_AVCProfileMain == this->profile)
+			tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
+				IH264_MAIN_PROFILE;
+		else
+			GST_ERROR_OBJECT (this, "Profile needs to be High or Main to add B frames");
+
+		tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+			rateControlPreset = IVIDEO_STORAGE;
+
+		g_mutex_lock (&_omx_mutex);
+		error =
+			OMX_SetParameter (base->handle,
+			(OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+		g_mutex_unlock (&_omx_mutex);
+		if (GST_OMX_FAIL (error))
+		  goto nointerlaced;
+	}
   }
 
   return error;
