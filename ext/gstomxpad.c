@@ -40,12 +40,8 @@ GstOmxPad *
 gst_omx_pad_new_from_template (GstPadTemplate * templ, const gchar * name)
 {
 
-  GstOmxPad *pad;
-  pad =  g_object_new (TYPE_GST_OMX_PAD,
+  return g_object_new (TYPE_GST_OMX_PAD,
       "name", name, "template", templ, "direction", templ->direction, NULL);
-  g_object_unref (templ);
-  return pad;
-  
 }
 
 static void
