@@ -398,6 +398,19 @@ gst_omx_aac_dec_init_pads (GstOmxBase * base)
     goto noconfiguration;
 
 
+  GST_INFO_OBJECT (this, "Enabling output port");
+  g_mutex_lock (&_omx_mutex);
+  OMX_SendCommand (base->handle, OMX_CommandPortEnable, 1, NULL);
+  g_mutex_unlock (&_omx_mutex);
+
+  GST_INFO_OBJECT (this, "Waiting for output port to enable");
+  error = gst_omx_base_wait_for_condition (base,
+      gst_omx_base_condition_enabled,
+      (gpointer) & GST_OMX_PAD (this->srcpad)->enabled, NULL);
+  if (GST_OMX_FAIL (error))
+    goto noenable;
+
+
   GST_INFO_OBJECT (this, "Enabling input port");
   g_mutex_lock (&_omx_mutex);
   OMX_SendCommand (base->handle, OMX_CommandPortEnable, 0, NULL);
@@ -411,17 +424,6 @@ gst_omx_aac_dec_init_pads (GstOmxBase * base)
   if (GST_OMX_FAIL (error))
     goto noenable;
 
-  GST_INFO_OBJECT (this, "Enabling output port");
-  g_mutex_lock (&_omx_mutex);
-  OMX_SendCommand (base->handle, OMX_CommandPortEnable, 1, NULL);
-  g_mutex_unlock (&_omx_mutex);
-
-  GST_INFO_OBJECT (this, "Waiting for output port to enable");
-  error = gst_omx_base_wait_for_condition (base,
-      gst_omx_base_condition_enabled,
-      (gpointer) & GST_OMX_PAD (this->srcpad)->enabled, NULL);
-  if (GST_OMX_FAIL (error))
-    goto noenable;
 
   return error;
 
@@ -587,8 +589,10 @@ gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
     buffer = gst_buffer_new_and_alloc (outbuf->nFilledLen);
     if (!buffer)
       goto noalloc;
-    gst_buffer_set_caps (buffer, caps);
+
     memcpy (buffer->data, outbuf->pBuffer, outbuf->nFilledLen);
+    GST_BUFFER_FREE_FUNC (buffer) = g_free;
+    GST_BUFFER_CAPS (buffer) = caps;
     GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
     GST_BUFFER_DURATION (buffer) = 1e9 * 1 / this->format.rate;
     GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
