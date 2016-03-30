@@ -703,8 +703,10 @@ gst_omx_aac_enc_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
     buffer = gst_buffer_new_and_alloc (outbuf->nFilledLen);
     if (!buffer)
       goto noalloc;
-    gst_buffer_set_caps (buffer, caps);
+    
     memcpy (buffer->data, outbuf->pBuffer, outbuf->nFilledLen);
+
+    GST_BUFFER_CAPS (buffer) = caps;
     GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
     GST_LOG_OBJECT (this,
         "(Fill %s) Buffer %p size %d reffcount %d bufdat %p->%p",
