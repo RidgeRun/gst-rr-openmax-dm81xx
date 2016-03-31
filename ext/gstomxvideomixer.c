@@ -44,6 +44,219 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_video_mixer_debug);
 #define GST_CAT_DEFAULT gst_omx_video_mixer_debug
 
+
+#define GST_TYPE_OMX_VIDEO_MIXER_PAD (gst_omx_video_mixer_pad_get_type())
+#define GST_OMX_VIDEO_MIXER_PAD(obj) \
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_VIDEO_MIXER_PAD, GstOmxVideoMixerPad))
+#define GST_VIDEO_OMX_MIXER_PAD_CLASS(klass) \
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_VIDEO_MIXER_PAD, GstOmxVideoMixerPadClass))
+#define GST_IS_OMX_VIDEO_MIXER_PAD(obj) \
+        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_VIDEO_MIXER_PAD))
+#define GST_IS_OMX_VIDEO_MIXER_PAD_CLASS(klass) \
+        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_VIDEO_MIXER_PAD))
+
+typedef struct _GstOmxVideoMixerPad GstOmxVideoMixerPad;
+typedef struct _GstOmxVideoMixerPadClass GstOmxVideoMixerPadClass;
+
+/* all information needed for one video stream */
+struct _GstOmxVideoMixerPad
+{
+  GstOmxPad parent;             /* subclass the pad */
+
+
+  /* Properties */
+  guint out_x;
+  guint out_y;
+  guint out_width;
+  guint out_height;
+  guint in_x;
+  guint in_y;
+  guint crop_width;
+  guint crop_height;
+};
+
+struct _GstOmxVideoMixerPadClass
+{
+  GstOmxPadClass parent_class;
+};
+
+
+enum
+{
+  PROP_PAD_0,
+  PROP_PAD_OUT_X,
+  PROP_PAD_OUT_Y,
+  PROP_PAD_OUT_WIDTH,
+  PROP_PAD_OUT_HEIGHT,
+  PROP_PAD_IN_X,
+  PROP_PAD_IN_Y,
+  PROP_PAD_CROP_WIDTH,
+  PROP_PAD_CROP_HEIGHT,
+};
+
+#define DEFAULT_PAD_OUT_X        0
+#define DEFAULT_PAD_OUT_Y        0
+#define DEFAULT_PAD_OUT_WIDTH    0
+#define DEFAULT_PAD_OUT_HEIGHT   0
+#define DEFAULT_PAD_IN_X         0
+#define DEFAULT_PAD_IN_Y         0
+#define DEFAULT_PAD_CROP_WIDTH   0
+#define DEFAULT_PAD_CROP_HEIGHT  0
+
+static void gst_omx_video_mixer_pad_get_property (GObject * object,
+    guint prop_id, GValue * value, GParamSpec * pspec);
+static void gst_omx_video_mixer_pad_set_property (GObject * object,
+    guint prop_id, const GValue * value, GParamSpec * pspec);
+
+GstOmxVideoMixerPad *gst_omx_video_mixer_pad_new_from_template (GstPadTemplate *
+    templ, const gchar * name);
+
+GType gst_omx_video_mixer_pad_get_type (void);
+G_DEFINE_TYPE (GstOmxVideoMixerPad, gst_omx_video_mixer_pad, TYPE_GST_OMX_PAD);
+
+static void
+gst_omx_video_mixer_pad_class_init (GstOmxVideoMixerPadClass * klass)
+{
+  GObjectClass *gobject_class = (GObjectClass *) klass;
+
+  gobject_class->set_property = gst_omx_video_mixer_pad_set_property;
+  gobject_class->get_property = gst_omx_video_mixer_pad_get_property;
+
+  g_object_class_install_property (gobject_class, PROP_PAD_OUT_X,
+      g_param_spec_uint ("outX", "Output X position",
+          "X position of the output picture", 0, G_MAXINT,
+          DEFAULT_PAD_OUT_X, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_OUT_Y,
+      g_param_spec_uint ("outY", "Output Y position",
+          "Y position of the output picture", 0, G_MAXINT,
+          DEFAULT_PAD_OUT_Y, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_OUT_WIDTH,
+      g_param_spec_uint ("outWidth", "Output width",
+          "Width of the output picture", 0, G_MAXINT,
+          DEFAULT_PAD_OUT_WIDTH, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_OUT_HEIGHT,
+      g_param_spec_uint ("outHeight", "Output height",
+          "Height of the output picture", 0, G_MAXINT,
+          DEFAULT_PAD_OUT_HEIGHT, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_IN_X,
+      g_param_spec_uint ("inX", "Input X crop position",
+          "X position of the crop input picture", 0, G_MAXINT,
+          DEFAULT_PAD_IN_X, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_IN_Y,
+      g_param_spec_uint ("inY", "Input Y crop position",
+          "Y position of the crop input picture", 0, G_MAXINT,
+          DEFAULT_PAD_IN_Y, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_CROP_WIDTH,
+      g_param_spec_uint ("cropWidth", "Input crop width",
+          "Width of the crop input picture", 0, G_MAXINT,
+          DEFAULT_PAD_CROP_WIDTH, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PAD_CROP_HEIGHT,
+      g_param_spec_uint ("cropHeight", "Input crop height",
+          "Height of the crop input picture", 0, G_MAXINT,
+          DEFAULT_PAD_CROP_HEIGHT, G_PARAM_READWRITE));
+
+}
+
+static void
+gst_omx_video_mixer_pad_init (GstOmxVideoMixerPad * mixerpad)
+{
+  mixerpad->out_x = DEFAULT_PAD_OUT_X;
+  mixerpad->out_y = DEFAULT_PAD_OUT_Y;
+  mixerpad->out_width = DEFAULT_PAD_OUT_WIDTH;
+  mixerpad->out_height = DEFAULT_PAD_OUT_HEIGHT;
+  mixerpad->in_x = DEFAULT_PAD_IN_X;
+  mixerpad->in_y = DEFAULT_PAD_IN_Y;
+  mixerpad->crop_width = DEFAULT_PAD_CROP_WIDTH;
+  mixerpad->crop_height = DEFAULT_PAD_CROP_HEIGHT;
+}
+
+
+static void
+gst_omx_video_mixer_pad_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstOmxVideoMixerPad *mixerpad = GST_OMX_VIDEO_MIXER_PAD (object);
+
+  switch (prop_id) {
+    case PROP_PAD_OUT_X:
+      g_value_set_uint (value, mixerpad->out_x);
+      break;
+    case PROP_PAD_OUT_Y:
+      g_value_set_uint (value, mixerpad->out_y);
+      break;
+    case PROP_PAD_OUT_WIDTH:
+      g_value_set_uint (value, mixerpad->out_width);
+      break;
+    case PROP_PAD_OUT_HEIGHT:
+      g_value_set_uint (value, mixerpad->out_height);
+      break;
+    case PROP_PAD_IN_X:
+      g_value_set_uint (value, mixerpad->in_x);
+      break;
+    case PROP_PAD_IN_Y:
+      g_value_set_uint (value, mixerpad->in_y);
+      break;
+    case PROP_PAD_CROP_WIDTH:
+      g_value_set_uint (value, mixerpad->crop_width);
+      break;
+    case PROP_PAD_CROP_HEIGHT:
+      g_value_set_uint (value, mixerpad->crop_height);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_video_mixer_pad_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstOmxVideoMixerPad *mixerpad = GST_OMX_VIDEO_MIXER_PAD (object);
+
+  GST_INFO_OBJECT (mixerpad, "Setting property %s", pspec->name);
+
+  switch (prop_id) {
+    case PROP_PAD_OUT_X:
+      mixerpad->out_x = g_value_get_uint (value);
+      break;
+    case PROP_PAD_OUT_Y:
+      mixerpad->out_y = g_value_get_uint (value);
+      break;
+    case PROP_PAD_OUT_WIDTH:
+      mixerpad->out_width = g_value_get_uint (value);
+      break;
+    case PROP_PAD_OUT_HEIGHT:
+      mixerpad->out_height = g_value_get_uint (value);
+      break;
+    case PROP_PAD_IN_X:
+      mixerpad->in_x = g_value_get_uint (value);
+      break;
+    case PROP_PAD_IN_Y:
+      mixerpad->in_y = g_value_get_uint (value);
+      break;
+    case PROP_PAD_CROP_WIDTH:
+      mixerpad->crop_width = g_value_get_uint (value);
+      break;
+    case PROP_PAD_CROP_HEIGHT:
+      mixerpad->crop_height = g_value_get_uint (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+
+}
+
+GstOmxVideoMixerPad *
+gst_omx_video_mixer_pad_new_from_template (GstPadTemplate * templ,
+    const gchar * name)
+{
+
+  return g_object_new (GST_TYPE_OMX_VIDEO_MIXER_PAD,
+      "name", name, "template", templ, "direction", templ->direction, NULL);
+}
+
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink%d",
     GST_PAD_SINK,
     GST_PAD_REQUEST,
@@ -70,8 +283,9 @@ enum
 
 #define OMX_VIDEO_MIXER_HANDLE_NAME   "OMX.TI.VPSSM3.VFPC.INDTXSCWB"
 
-GST_BOILERPLATE (GstOmxVideoMixer, gst_omx_video_mixer, GstElement,
-    GST_TYPE_ELEMENT);
+static void _do_init (GType object_type);
+GST_BOILERPLATE_FULL (GstOmxVideoMixer, gst_omx_video_mixer, GstElement,
+    GST_TYPE_ELEMENT, _do_init);
 
 static void gst_omx_video_mixer_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -95,6 +309,23 @@ static GstFlowReturn gst_omx_video_mixer_collected (GstCollectPads2 * pads,
 static OMX_ERRORTYPE gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * this,
     gchar * handle_name);
 static OMX_ERRORTYPE gst_omx_video_mixer_free_omx (GstOmxVideoMixer * mixer);
+
+static void gst_omx_video_mixer_child_proxy_init (gpointer g_iface,
+    gpointer iface_data);
+
+
+static void
+_do_init (GType object_type)
+{
+  static const GInterfaceInfo child_proxy_info = {
+    (GInterfaceInitFunc) gst_omx_video_mixer_child_proxy_init,
+    NULL,
+    NULL
+  };
+
+  g_type_add_interface_static (object_type, GST_TYPE_CHILD_PROXY,
+      &child_proxy_info);
+}
 
 /* GObject vmethod implementations */
 
@@ -129,6 +360,9 @@ gst_omx_video_mixer_class_init (GstOmxVideoMixerClass * klass)
   gobject_class->get_property = gst_omx_video_mixer_get_property;
   gobject_class->finalize = gst_omx_video_mixer_finalize;
 
+
+  /* Register the pad class */
+  (void) (GST_TYPE_OMX_VIDEO_MIXER_PAD);
 
   gstelement_class->request_new_pad =
       GST_DEBUG_FUNCPTR (gst_omx_video_mixer_request_new_pad);
@@ -203,7 +437,7 @@ gst_omx_video_mixer_request_new_pad (GstElement * element,
 {
   GstElementClass *klass = GST_ELEMENT_GET_CLASS (element);
   GstOmxVideoMixer *mixer;
-  GstOmxPad *omxpad;
+  GstOmxVideoMixerPad *omxpad;
   gchar *name;
 
   mixer = GST_OMX_VIDEO_MIXER (element);
@@ -212,7 +446,7 @@ gst_omx_video_mixer_request_new_pad (GstElement * element,
     return NULL;
 
   name = g_strdup_printf ("sink%d", mixer->next_sinkpad++);
-  omxpad = gst_omx_pad_new_from_template (templ, name);
+  omxpad = gst_omx_video_mixer_pad_new_from_template (templ, name);
   g_free (name);
 
   gst_collect_pads2_add_pad (mixer->collect, GST_PAD (omxpad),
@@ -223,6 +457,8 @@ gst_omx_video_mixer_request_new_pad (GstElement * element,
 
   GST_DEBUG_OBJECT (element, "Adding pad %s", GST_PAD_NAME (omxpad));
   gst_element_add_pad (element, GST_PAD (omxpad));
+
+  gst_child_proxy_child_added (GST_OBJECT (mixer), GST_OBJECT (omxpad));
 
   return GST_PAD (omxpad);
 }
@@ -236,10 +472,13 @@ gst_omx_video_mixer_release_pad (GstElement * element, GstPad * pad)
 
   gst_collect_pads2_remove_pad (mixer->collect, pad);
 
+  gst_child_proxy_child_removed (GST_OBJECT (mixer), GST_OBJECT (pad));
+
   mixer->sinkpads = g_list_remove (mixer->sinkpads, pad);
   mixer->sinkpad_count--;
 
   GST_DEBUG_OBJECT (element, "Removing pad %s", GST_PAD_NAME (pad));
+
   gst_element_remove_pad (element, pad);
 }
 
@@ -284,6 +523,7 @@ allocate_fail:
   }
 }
 
+
 static GstFlowReturn
 gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 {
@@ -310,6 +550,50 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
   return ret;
 }
 
+
+/* GstChildProxy implementation */
+static GstObject *
+gst_omx_video_mixer_child_proxy_get_child_by_index (GstChildProxy * child_proxy,
+    guint index)
+{
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (child_proxy);
+  GstObject *obj;
+
+  GST_OBJECT_LOCK (mixer);
+  if ((obj = g_list_nth_data (mixer->sinkpads, index)))
+    gst_object_ref (obj);
+  GST_OBJECT_UNLOCK (mixer);
+
+  return obj;
+}
+
+static guint
+gst_omx_video_mixer_child_proxy_get_children_count (GstChildProxy * child_proxy)
+{
+  guint count = 0;
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (child_proxy);
+
+  GST_OBJECT_LOCK (mixer);
+  count = mixer->sinkpad_count;
+  GST_OBJECT_UNLOCK (mixer);
+
+  GST_INFO_OBJECT (mixer, "Children Count: %d", count);
+  return count;
+}
+
+static void
+gst_omx_video_mixer_child_proxy_init (gpointer g_iface, gpointer iface_data)
+{
+  GstChildProxyInterface *iface = g_iface;
+
+  GST_INFO ("intializing child proxy interface");
+  iface->get_child_by_index =
+      gst_omx_video_mixer_child_proxy_get_child_by_index;
+  iface->get_children_count =
+      gst_omx_video_mixer_child_proxy_get_children_count;
+}
+
+/* Omx mixer implementation */
 static OMX_ERRORTYPE
 gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
 {
