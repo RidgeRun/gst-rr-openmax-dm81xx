@@ -38,6 +38,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
+#include "timm_osal_interfaces.h"
 #include "gstomxvideomixer.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_omx_video_mixer_debug);
@@ -67,6 +68,7 @@ enum
   PROP_0,
 };
 
+#define OMX_VIDEO_MIXER_HANDLE_NAME   "OMX.TI.VPSSM3.VFPC.INDTXSCWB"
 
 GST_BOILERPLATE (GstOmxVideoMixer, gst_omx_video_mixer, GstElement,
     GST_TYPE_ELEMENT);
@@ -83,12 +85,16 @@ static GstPad *gst_omx_video_mixer_request_new_pad (GstElement * element,
     GstPadTemplate * templ, const gchar * req_name);
 static void gst_omx_video_mixer_release_pad (GstElement * element,
     GstPad * pad);
-
 static GstStateChangeReturn gst_omx_video_mixer_change_state (GstElement *
     element, GstStateChange transition);
 
 static GstFlowReturn gst_omx_video_mixer_collected (GstCollectPads2 * pads,
     GstOmxVideoMixer * mixer);
+
+
+static OMX_ERRORTYPE gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * this,
+    gchar * handle_name);
+static OMX_ERRORTYPE gst_omx_video_mixer_free_omx (GstOmxVideoMixer * mixer);
 
 /* GObject vmethod implementations */
 
@@ -150,8 +156,7 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   GST_INFO_OBJECT (mixer, "Initializing %s", GST_OBJECT_NAME (mixer));
 
   mixer->collect = gst_collect_pads2_new ();
-  gst_collect_pads2_set_function (mixer->collect,
-      (GstCollectPads2Function)
+  gst_collect_pads2_set_function (mixer->collect, (GstCollectPads2Function)
       GST_DEBUG_FUNCPTR (gst_omx_video_mixer_collected), mixer);
 }
 
@@ -245,8 +250,16 @@ gst_omx_video_mixer_change_state (GstElement * element,
 {
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (element);
   GstStateChangeReturn ret;
+  OMX_ERRORTYPE error;
 
   switch (transition) {
+
+    case GST_STATE_CHANGE_NULL_TO_READY:
+      error =
+          gst_omx_video_mixer_allocate_omx (mixer, OMX_VIDEO_MIXER_HANDLE_NAME);
+      if (GST_OMX_FAIL (error))
+        goto allocate_fail;
+      break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
       GST_LOG_OBJECT (mixer, "Starting collectpads");
       gst_collect_pads2_start (mixer->collect);
@@ -262,13 +275,20 @@ gst_omx_video_mixer_change_state (GstElement * element,
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
 
   return ret;
+
+allocate_fail:
+  {
+    GST_ELEMENT_ERROR (mixer, LIBRARY,
+        INIT, (gst_omx_error_to_str (error)), (NULL));
+    return GST_STATE_CHANGE_FAILURE;
+  }
 }
 
 static GstFlowReturn
 gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 {
   GstFlowReturn ret = GST_FLOW_OK;
-  GList *l;
+  GSList *l;
 
   GST_DEBUG_OBJECT (mixer, "Entering collected");
   for (l = mixer->collect->data; l; l = l->next) {
@@ -285,8 +305,78 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
           buffer, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
       gst_buffer_unref (buffer);
     }
-
   }
 
   return ret;
+}
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (mixer, "Allocating OMX resources for %s", handle_name);
+
+  mixer->callbacks = TIMM_OSAL_Malloc (sizeof (OMX_CALLBACKTYPE),
+      TIMM_OSAL_TRUE, 0, TIMMOSAL_MEM_SEGMENT_EXT);
+  if (!mixer->callbacks) {
+    error = OMX_ErrorInsufficientResources;
+    goto noresources;
+  }
+
+  if (!handle_name) {
+    error = OMX_ErrorInvalidComponentName;
+    goto nohandlename;
+  }
+
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_GetHandle (&mixer->handle, handle_name, mixer, mixer->callbacks);
+  g_mutex_unlock (&_omx_mutex);
+  if ((error != OMX_ErrorNone) || (!mixer->handle))
+    goto nohandle;
+
+  return error;
+
+noresources:
+  {
+    GST_ERROR_OBJECT (mixer, "Insufficient OMX memory resources");
+    return error;
+  }
+nohandlename:
+  {
+    GST_ERROR_OBJECT (mixer, "The component name has not been defined");
+    return error;
+  }
+nohandle:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to grab OMX handle: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_free_omx (GstOmxVideoMixer * mixer)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_INFO_OBJECT (mixer, "Freeing OMX resources");
+
+  TIMM_OSAL_Free (mixer->callbacks);
+
+  g_mutex_lock (&_omx_mutex);
+  error = OMX_FreeHandle (mixer->handle);
+  g_mutex_unlock (&_omx_mutex);
+  if (error != OMX_ErrorNone)
+    goto freehandle;
+
+  return error;
+
+freehandle:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to free OMX handle: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
 }
