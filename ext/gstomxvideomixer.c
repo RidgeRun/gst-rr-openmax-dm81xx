@@ -513,6 +513,15 @@ gst_omx_video_mixer_change_state (GstElement * element,
 
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
 
+
+  switch (transition) {
+
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      gst_omx_video_mixer_free_omx(mixer);
+      break;
+    default:
+      break;
+  }
   return ret;
 
 allocate_fail:
