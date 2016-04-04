@@ -723,6 +723,24 @@ gst_omx_video_mixer_child_proxy_init (gpointer g_iface, gpointer iface_data)
 }
 
 /* Omx mixer implementation */
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_event_callback (OMX_HANDLETYPE handle,
+    gpointer data,
+    OMX_EVENTTYPE event, guint32 nevent1, guint32 nevent2, gpointer eventdata)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
+
+  switch (event) {
+    case OMX_EventError:
+      GST_ERROR_OBJECT (mixer, "OMX error event received: %s",
+          gst_omx_error_to_str (nevent1));
+      break;
+  }
+  return error;
+}
+
 static OMX_ERRORTYPE
 gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
 {
@@ -736,6 +754,9 @@ gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
     error = OMX_ErrorInsufficientResources;
     goto noresources;
   }
+
+  mixer->callbacks->EventHandler =
+      (GstOmxEventHandler) gst_omx_video_mixer_event_callback;
 
   if (!handle_name) {
     error = OMX_ErrorInvalidComponentName;
