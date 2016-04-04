@@ -52,6 +52,13 @@ struct _GstOmxVideoMixer
   /* sink pads using Collect Pads 2 */
   GstCollectPads2 *collect;
 
+  gboolean started;
+
+  /* Caps */
+  guint src_width;
+  guint src_height;
+
+  /* Omx */
   OMX_HANDLETYPE handle;
   OMX_CALLBACKTYPE *callbacks;
 

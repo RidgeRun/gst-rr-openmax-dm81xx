@@ -63,6 +63,9 @@ struct _GstOmxVideoMixerPad
 {
   GstOmxPad parent;             /* subclass the pad */
 
+  /* Caps */
+  guint width;
+  guint height;
 
   /* Properties */
   guint out_x;
@@ -299,6 +302,8 @@ static GstPad *gst_omx_video_mixer_request_new_pad (GstElement * element,
     GstPadTemplate * templ, const gchar * req_name);
 static void gst_omx_video_mixer_release_pad (GstElement * element,
     GstPad * pad);
+static gboolean gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps);
+
 static GstStateChangeReturn gst_omx_video_mixer_change_state (GstElement *
     element, GstStateChange transition);
 
@@ -389,6 +394,8 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
 
   GST_INFO_OBJECT (mixer, "Initializing %s", GST_OBJECT_NAME (mixer));
 
+  mixer->started = FALSE;
+
   mixer->collect = gst_collect_pads2_new ();
   gst_collect_pads2_set_function (mixer->collect, (GstCollectPads2Function)
       GST_DEBUG_FUNCPTR (gst_omx_video_mixer_collected), mixer);
@@ -448,6 +455,10 @@ gst_omx_video_mixer_request_new_pad (GstElement * element,
   name = g_strdup_printf ("sink%d", mixer->next_sinkpad++);
   omxpad = gst_omx_video_mixer_pad_new_from_template (templ, name);
   g_free (name);
+
+  /* Setup pad functions */
+  gst_pad_set_setcaps_function (GST_PAD (omxpad),
+      gst_omx_video_mixer_sink_setcaps);
 
   gst_collect_pads2_add_pad (mixer->collect, GST_PAD (omxpad),
       sizeof (GstCollectData2));
@@ -517,7 +528,7 @@ gst_omx_video_mixer_change_state (GstElement * element,
   switch (transition) {
 
     case GST_STATE_CHANGE_READY_TO_NULL:
-      gst_omx_video_mixer_free_omx(mixer);
+      gst_omx_video_mixer_free_omx (mixer);
       break;
     default:
       break;
@@ -532,12 +543,115 @@ allocate_fail:
   }
 }
 
+static gboolean
+gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps)
+{
+  GstOmxVideoMixerPad *omxpad;
+  GstVideoFormat fmt;
+  gint width, height;
+
+  GST_INFO_OBJECT (pad, "Setting caps %" GST_PTR_FORMAT, caps);
+
+  omxpad = GST_OMX_VIDEO_MIXER_PAD (pad);
+
+  if (!gst_video_format_parse_caps (caps, &fmt, &width, &height))
+    goto parse_failed;
+
+
+  omxpad->width = width;
+  omxpad->height = height;
+
+  return TRUE;
+
+parse_failed:
+  {
+    GST_ERROR_OBJECT (pad, "Failed to parse caps");
+    return FALSE;
+  }
+
+}
+
+static gboolean
+gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
+{
+  GList *l;
+  guint min_width = 0, min_height = 0;
+  GstStructure *s;
+  GstCaps *caps, *peercaps;
+  gboolean ret = FALSE;
+
+  /* Get the minimun output image size required to contain  
+     the mixer mosaic */
+  for (l = mixer->sinkpads; l; l = l->next) {
+    GstOmxVideoMixerPad *omxpad = l->data;
+    guint cur_width = 0, cur_height = 0;
+
+    if (!omxpad->width || !omxpad->height) {
+      GST_WARNING_OBJECT (mixer,
+          "pad %s not configured, this should not happen",
+          GST_OBJECT_NAME (omxpad));
+      continue;
+    }
+
+    cur_width = omxpad->out_width + omxpad->out_x;
+    cur_height = omxpad->out_height + omxpad->out_y;
+
+    if (min_width < cur_width)
+      min_width = cur_width;
+    if (min_height < cur_height)
+      min_height = cur_height;
+  }
+
+  /* Set src caps */
+  peercaps = gst_pad_peer_get_caps (mixer->srcpad);
+  if (peercaps) {
+    GstCaps *tmp;
+
+    caps = gst_video_format_new_caps_simple (GST_VIDEO_FORMAT_YUY2, 0,
+        "width", GST_TYPE_INT_RANGE, min_width, G_MAXINT,
+        "height", GST_TYPE_INT_RANGE, min_height, G_MAXINT, NULL);
+
+    tmp = gst_caps_intersect (caps, peercaps);
+    gst_caps_unref (caps);
+    gst_caps_unref (peercaps);
+    caps = tmp;
+
+    if (gst_caps_is_empty (caps)) {
+      ret = FALSE;
+      goto done;
+    }
+
+    gst_caps_truncate (caps);
+    s = gst_caps_get_structure (caps, 0);
+    gst_structure_fixate_field_nearest_int (s, "width", min_width);
+    gst_structure_fixate_field_nearest_int (s, "height", min_height);
+
+    gst_structure_get_int (s, "width", &mixer->src_width);
+    gst_structure_get_int (s, "height", &mixer->src_height);
+
+    ret = gst_pad_set_caps (mixer->srcpad, caps);
+    gst_caps_unref (caps);
+  }
+
+
+done:
+  return ret;
+}
+
 
 static GstFlowReturn
 gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   GSList *l;
+
+  if (!mixer->started) {
+
+    if (!gst_omx_video_mixer_update_src_caps (mixer))
+      goto caps_failed;
+
+    mixer->started = TRUE;
+  }
 
   GST_DEBUG_OBJECT (mixer, "Entering collected");
   for (l = mixer->collect->data; l; l = l->next) {
@@ -557,6 +671,12 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
   }
 
   return ret;
+
+caps_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to set src caps");
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
 }
 
 
