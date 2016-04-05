@@ -46,6 +46,7 @@ struct _GstOmxVideoMixer
 
   GstPad *srcpad;
   GList *sinkpads;
+  GList *srcpads;
   guint sinkpad_count;
   guint next_sinkpad;
 
@@ -57,11 +58,15 @@ struct _GstOmxVideoMixer
   /* Caps */
   guint src_width;
   guint src_height;
+  guint src_stride;
+
+  /* Properties */
+  guint input_buffers;
+  guint output_buffers;
 
   /* Omx */
   OMX_HANDLETYPE handle;
   OMX_CALLBACKTYPE *callbacks;
-
 };
 
 struct _GstOmxVideoMixerClass

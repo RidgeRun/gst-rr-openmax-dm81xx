@@ -66,6 +66,7 @@ struct _GstOmxVideoMixerPad
   /* Caps */
   guint width;
   guint height;
+  guint stride;
 
   /* Properties */
   guint out_x;
@@ -285,6 +286,8 @@ enum
 };
 
 #define OMX_VIDEO_MIXER_HANDLE_NAME   "OMX.TI.VPSSM3.VFPC.INDTXSCWB"
+#define DEFAULT_VIDEO_MIXER_NUM_INPUT_BUFFERS    8
+#define DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS   8
 
 static void _do_init (GType object_type);
 GST_BOILERPLATE_FULL (GstOmxVideoMixer, gst_omx_video_mixer, GstElement,
@@ -309,15 +312,16 @@ static GstStateChangeReturn gst_omx_video_mixer_change_state (GstElement *
 
 static GstFlowReturn gst_omx_video_mixer_collected (GstCollectPads2 * pads,
     GstOmxVideoMixer * mixer);
+gboolean gst_omx_video_mixer_create_dummy_sink_pads (GstOmxVideoMixer * mixer);
+gboolean gst_omx_video_mixer_free_dummy_sink_pads (GstOmxVideoMixer * mixer);
 
-
-static OMX_ERRORTYPE gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * this,
+static OMX_ERRORTYPE gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer,
     gchar * handle_name);
 static OMX_ERRORTYPE gst_omx_video_mixer_free_omx (GstOmxVideoMixer * mixer);
+static OMX_ERRORTYPE gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer);
 
 static void gst_omx_video_mixer_child_proxy_init (gpointer g_iface,
     gpointer iface_data);
-
 
 static void
 _do_init (GType object_type)
@@ -395,6 +399,10 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   GST_INFO_OBJECT (mixer, "Initializing %s", GST_OBJECT_NAME (mixer));
 
   mixer->started = FALSE;
+  mixer->input_buffers = DEFAULT_VIDEO_MIXER_NUM_INPUT_BUFFERS;
+  mixer->output_buffers = DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS;
+  mixer->sinkpads = NULL;
+  mixer->srcpads = NULL;
 
   mixer->collect = gst_collect_pads2_new ();
   gst_collect_pads2_set_function (mixer->collect, (GstCollectPads2Function)
@@ -517,6 +525,8 @@ gst_omx_video_mixer_change_state (GstElement * element,
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       GST_LOG_OBJECT (mixer, "Stopping collectpads");
       gst_collect_pads2_stop (mixer->collect);
+      gst_omx_video_mixer_free_dummy_sink_pads (mixer);
+      mixer->started = FALSE;
       break;
     default:
       break;
@@ -548,6 +558,7 @@ gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps)
 {
   GstOmxVideoMixerPad *omxpad;
   GstVideoFormat fmt;
+  GstStructure *s;
   gint width, height;
 
   GST_INFO_OBJECT (pad, "Setting caps %" GST_PTR_FORMAT, caps);
@@ -560,6 +571,10 @@ gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps)
 
   omxpad->width = width;
   omxpad->height = height;
+
+  s = gst_caps_get_structure (caps, 0);
+  if (!gst_structure_get_uint (s, "stride", &omxpad->stride))
+    omxpad->stride = omxpad->width;
 
   return TRUE;
 
@@ -629,6 +644,9 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
     gst_structure_get_int (s, "width", &mixer->src_width);
     gst_structure_get_int (s, "height", &mixer->src_height);
 
+    mixer->src_stride =
+        gst_video_format_get_row_stride (GST_VIDEO_FORMAT_YUY2, 0,
+        mixer->src_width);
     ret = gst_pad_set_caps (mixer->srcpad, caps);
     gst_caps_unref (caps);
   }
@@ -649,6 +667,9 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 
     if (!gst_omx_video_mixer_update_src_caps (mixer))
       goto caps_failed;
+
+    if (GST_OMX_FAIL (gst_omx_video_mixer_init_ports (mixer)))
+      goto init_ports_failed;
 
     mixer->started = TRUE;
   }
@@ -677,8 +698,54 @@ caps_failed:
     GST_ERROR_OBJECT (mixer, "Failed to set src caps");
     return GST_FLOW_NOT_NEGOTIATED;
   }
+init_ports_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to initialize omx ports");
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
 }
 
+gboolean
+gst_omx_video_mixer_create_dummy_sink_pads (GstOmxVideoMixer * mixer)
+{
+  GstOmxPad *omxpad;
+  guint i;
+  gchar *name;
+
+  if (mixer->srcpads)
+    gst_omx_video_mixer_free_dummy_sink_pads (mixer);
+
+  mixer->srcpads = g_list_append (mixer->srcpads, mixer->srcpad);
+
+  for (i = 1; i < mixer->sinkpad_count; i++) {
+    name = g_strdup_printf ("src%d", i);
+    omxpad =
+        gst_omx_pad_new_from_template (gst_static_pad_template_get
+        (&src_template), name);
+    g_free (name);
+    mixer->srcpads = g_list_append (mixer->srcpads, omxpad);
+  }
+
+  return TRUE;
+}
+
+gboolean
+gst_omx_video_mixer_free_dummy_sink_pads (GstOmxVideoMixer * mixer)
+{
+  GstOmxPad *omxpad;
+  GList *l;
+
+  mixer->srcpads = g_list_remove (mixer->srcpads, mixer->srcpad);
+
+  for (l = mixer->srcpads; l; l = l->next) {
+    omxpad = l->data;
+    mixer->srcpads = g_list_remove (mixer->srcpads, omxpad);
+    gst_object_unref (omxpad);
+  }
+
+  mixer->srcpads = NULL;
+  return TRUE;
+}
 
 /* GstChildProxy implementation */
 static GstObject *
@@ -812,5 +879,272 @@ freehandle:
     GST_ERROR_OBJECT (mixer, "Unable to free OMX handle: %s",
         gst_omx_error_to_str (error));
     return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_init_port_memory (GstOmxVideoMixer * mixer)
+{
+  OMX_PARAM_BUFFER_MEMORYTYPE memory;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxPad *omxpad;
+  GList *l;
+  guint i;
+
+  for (l = mixer->sinkpads, i = 0; l; l = l->next, i++) {
+    omxpad = l->data;
+    GST_OMX_INIT_STRUCT (&memory, OMX_PARAM_BUFFER_MEMORYTYPE);
+    memory.nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX + i;
+    memory.eBufMemoryType = OMX_BUFFER_MEMORY_DEFAULT;
+
+    GST_DEBUG_OBJECT (omxpad, "Initializing sink pad memory for port %lu",
+        memory.nPortIndex);
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (mixer->handle, OMX_TI_IndexParamBuffMemType, &memory);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      goto memory_failed;
+    }
+  }
+
+  for (l = mixer->srcpads, i = 0; l; l = l->next, i++) {
+    omxpad = l->data;
+    GST_OMX_INIT_STRUCT (&memory, OMX_PARAM_BUFFER_MEMORYTYPE);
+    memory.nPortIndex = OMX_VFPC_OUTPUT_PORT_START_INDEX + i;
+    memory.eBufMemoryType = OMX_BUFFER_MEMORY_DEFAULT;
+
+    GST_DEBUG_OBJECT (omxpad, "Initializing src pad memory for port %lu",
+        memory.nPortIndex);
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (mixer->handle, OMX_TI_IndexParamBuffMemType, &memory);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      goto memory_failed;
+    }
+  }
+
+  return error;
+
+memory_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to configure port memory: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_dynamic_configuration (GstOmxVideoMixer * mixer,
+    GstOmxVideoMixerPad * mixerpad, guint id)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_CONFIG_VIDCHANNEL_RESOLUTION resolution;
+
+  GST_DEBUG_OBJECT (mixer, "Set input channel %d resolution", id);
+  GST_OMX_INIT_STRUCT (&resolution, OMX_CONFIG_VIDCHANNEL_RESOLUTION);
+  resolution.Frm0Width = mixerpad->width;
+  resolution.Frm0Height = mixerpad->height;
+  resolution.Frm0Pitch = mixerpad->stride;
+  resolution.Frm1Width = 0;
+  resolution.Frm1Height = 0;
+  resolution.Frm1Pitch = 0;
+  resolution.FrmStartX = mixerpad->in_x;
+  resolution.FrmStartY = mixerpad->in_y;
+  resolution.FrmCropWidth = mixerpad->crop_width;
+  resolution.FrmCropHeight = mixerpad->crop_height;
+  resolution.eDir = OMX_DirInput;
+  resolution.nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX + id;
+  resolution.nChId = id;
+
+  g_mutex_lock (&_omx_mutex);
+  error =
+      OMX_SetConfig (mixer->handle,
+      (OMX_INDEXTYPE) OMX_TI_IndexConfigVidChResolution, &resolution);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto chresolution_failed;
+
+
+  GST_DEBUG_OBJECT (mixer, "Set output channel %d resolution", id);
+  GST_OMX_INIT_STRUCT (&resolution, OMX_CONFIG_VIDCHANNEL_RESOLUTION);
+  resolution.Frm0Width = mixerpad->out_width;
+  resolution.Frm0Height = mixerpad->out_height;
+  resolution.Frm0Pitch = mixer->src_stride;
+  resolution.Frm1Width = 0;
+  resolution.Frm1Height = 0;
+  resolution.Frm1Pitch = 0;
+  resolution.FrmStartX = mixerpad->out_x * 2;
+  resolution.FrmStartY = mixerpad->out_y * 2;
+  resolution.FrmCropWidth = 0;
+  resolution.FrmCropHeight = 0;
+  resolution.eDir = OMX_DirOutput;
+  resolution.nPortIndex = OMX_VFPC_OUTPUT_PORT_START_INDEX + id;
+  resolution.nChId = id;
+
+  g_mutex_lock (&_omx_mutex);
+  error =
+      OMX_SetConfig (mixer->handle,
+      (OMX_INDEXTYPE) OMX_TI_IndexConfigVidChResolution, &resolution);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto chresolution_failed;
+
+  return error;
+
+chresolution_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to change channel %d resolution: %s", id,
+        gst_omx_error_to_str (error));
+    return error;
+  }
+
+}
+
+
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_PARAM_PORTDEFINITIONTYPE *port;
+  OMX_PARAM_VFPC_NUMCHANNELPERHANDLE channels;
+  OMX_CONFIG_ALG_ENABLE enable;
+  GstOmxPad *omxpad;
+  gchar *portname;
+  GList *l;
+  guint i;
+
+  gst_omx_video_mixer_create_dummy_sink_pads (mixer);
+
+  error = gst_omx_video_mixer_init_port_memory (mixer);
+  if (GST_OMX_FAIL (error))
+    goto error;
+
+  for (l = mixer->sinkpads, i = 0; l; l = l->next, i++) {
+    GstOmxVideoMixerPad *mixerpad;
+
+    omxpad = l->data;
+    mixerpad = GST_OMX_VIDEO_MIXER_PAD (omxpad);
+
+    port = GST_OMX_PAD_PORT (omxpad);
+    GST_OMX_INIT_STRUCT (port, OMX_PARAM_PORTDEFINITIONTYPE);
+    port->nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX + i;
+    port->eDir = OMX_DirInput;
+
+    GST_DEBUG_OBJECT (mixerpad, "Initializing sink pad port %lu",
+        port->nPortIndex);
+
+    port->format.video.nFrameWidth = mixerpad->width;
+    port->format.video.nFrameHeight = mixerpad->height;
+    port->format.video.nStride = mixerpad->stride;
+    port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+    port->nBufferSize = (mixerpad->stride * mixerpad->height * 3) / 2;
+    port->nBufferCountActual = mixer->input_buffers;
+    port->nBufferAlignment = 0;
+    port->bBuffersContiguous = 0;
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (mixer->handle, OMX_IndexParamPortDefinition, port);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      portname = "input";
+      goto port_failed;
+    }
+  }
+
+  for (l = mixer->srcpads, i = 0; l; l = l->next, i++) {
+    omxpad = l->data;
+    port = GST_OMX_PAD_PORT (omxpad);
+    GST_OMX_INIT_STRUCT (port, OMX_PARAM_PORTDEFINITIONTYPE);
+    port->nPortIndex = OMX_VFPC_OUTPUT_PORT_START_INDEX + i;
+    port->eDir = OMX_DirOutput;
+
+    GST_DEBUG_OBJECT (omxpad, "Initializing src pad port %lu",
+        port->nPortIndex);
+
+    port->format.video.nFrameWidth = mixer->src_width;
+    port->format.video.nFrameHeight = mixer->src_height;
+    port->format.video.nStride = mixer->src_stride;
+    port->format.video.eColorFormat = OMX_COLOR_FormatYCbYCr;
+    port->nBufferSize = mixer->src_stride * mixer->src_height;
+    port->nBufferCountActual = mixer->output_buffers;
+    port->nBufferAlignment = 0;
+    port->bBuffersContiguous = 0;
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetParameter (mixer->handle, OMX_IndexParamPortDefinition, port);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      portname = "output";
+      goto port_failed;
+    }
+
+  }
+
+  GST_DEBUG_OBJECT (mixer, "Setting channels per handle");
+  GST_OMX_INIT_STRUCT (&channels, OMX_PARAM_VFPC_NUMCHANNELPERHANDLE);
+  channels.nNumChannelsPerHandle = mixer->sinkpad_count;
+
+  g_mutex_lock (&_omx_mutex);
+  error =
+      OMX_SetParameter (mixer->handle,
+      (OMX_INDEXTYPE) OMX_TI_IndexParamVFPCNumChPerHandle, &channels);
+  g_mutex_unlock (&_omx_mutex);
+  if (GST_OMX_FAIL (error))
+    goto channels_failed;
+
+  /* Setting video mixer dinamic configuration */
+  for (l = mixer->sinkpads, i = 0; l; l = l->next, i++) {
+    GstOmxPad *omxpad = l->data;
+    GstOmxVideoMixerPad *mixerpad = GST_OMX_VIDEO_MIXER_PAD (omxpad);
+
+    GST_DEBUG_OBJECT (mixerpad, "Setting dynamic configuration");
+
+    error = gst_omx_video_mixer_dynamic_configuration (mixer, mixerpad, i);
+    if (GST_OMX_FAIL (error))
+      goto error;
+
+    GST_DEBUG_OBJECT (mixerpad, "Deactivating bypass mode");
+    GST_OMX_INIT_STRUCT (&enable, OMX_CONFIG_ALG_ENABLE);
+    enable.nPortIndex = OMX_VFPC_INPUT_PORT_START_INDEX + i;
+    enable.nChId = i;
+    enable.bAlgBypass = OMX_FALSE;
+
+    g_mutex_lock (&_omx_mutex);
+    error =
+        OMX_SetConfig (mixer->handle,
+        (OMX_INDEXTYPE) OMX_TI_IndexConfigAlgEnable, &enable);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto alg_enable_failed;
+
+  }
+  return error;
+
+port_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to set %s port parameters", portname);
+    return error;
+  }
+channels_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to set channels per handle");
+    return error;
+  }
+alg_enable_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to enable: %s",
+        gst_omx_error_to_str (error));
+    return FALSE;
+  }
+error:
+  {
+    return FALSE;
   }
 }
