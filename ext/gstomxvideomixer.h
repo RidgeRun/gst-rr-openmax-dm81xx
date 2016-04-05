@@ -67,6 +67,7 @@ struct _GstOmxVideoMixer
   /* Omx */
   OMX_HANDLETYPE handle;
   OMX_CALLBACKTYPE *callbacks;
+  OMX_STATETYPE state;
 
   /* Conditions */
   GMutex waitmutex;
