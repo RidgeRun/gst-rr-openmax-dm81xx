@@ -323,6 +323,22 @@ static OMX_ERRORTYPE gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer);
 static void gst_omx_video_mixer_child_proxy_init (gpointer g_iface,
     gpointer iface_data);
 
+typedef gboolean (*GstOmxVideoMixerCondition) (gpointer, gpointer);
+gboolean gst_omx_video_mixer_condition_enabled (gpointer enabled,
+    gpointer dummy);
+gboolean gst_omx_video_mixer_condition_disabled (gpointer enabled,
+    gpointer dummy);
+OMX_ERRORTYPE gst_omx_video_mixer_wait_for_condition (GstOmxVideoMixer * mixer,
+    GstOmxVideoMixerCondition condition, gpointer arg1, gpointer arg2);
+
+typedef OMX_ERRORTYPE (*GstOmxVideoMixerPadFunc) (GstOmxVideoMixer *,
+    GstOmxPad *, gpointer);
+static OMX_ERRORTYPE gst_omx_video_mixer_for_each_pad (GstOmxVideoMixer * mixer,
+    GstOmxVideoMixerPadFunc func, GstPadDirection direction, gpointer data);
+static OMX_ERRORTYPE gst_omx_video_mixer_enable_pad (GstOmxVideoMixer * mixer,
+    GstOmxPad * pad, gpointer data);
+
+
 static void
 _do_init (GType object_type)
 {
@@ -404,6 +420,9 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   mixer->sinkpads = NULL;
   mixer->srcpads = NULL;
 
+  g_mutex_init (&mixer->waitmutex);
+  g_cond_init (&mixer->waitcond);
+
   mixer->collect = gst_collect_pads2_new ();
   gst_collect_pads2_set_function (mixer->collect, (GstCollectPads2Function)
       GST_DEBUG_FUNCPTR (gst_omx_video_mixer_collected), mixer);
@@ -439,6 +458,9 @@ static void
 gst_omx_video_mixer_finalize (GObject * object)
 {
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (object);
+
+  g_mutex_clear (&mixer->waitmutex);
+  g_cond_clear (&mixer->waitcond);
 
   gst_object_unref (mixer->collect);
   /* Chain up to the parent class */
@@ -800,6 +822,22 @@ gst_omx_video_mixer_event_callback (OMX_HANDLETYPE handle,
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
 
   switch (event) {
+    case OMX_EventCmdComplete:
+      GST_INFO_OBJECT (mixer,
+          "OMX command complete event received: %s (%s) (%d)",
+          gst_omx_cmd_to_str (nevent1),
+          OMX_CommandStateSet ==
+          nevent1 ? gst_omx_state_to_str (nevent2) : "No debug", nevent2);
+
+      if (OMX_CommandPortEnable == nevent1) {
+        g_mutex_lock (&mixer->waitmutex);
+        gst_omx_video_mixer_for_each_pad (mixer, gst_omx_video_mixer_enable_pad,
+            GST_PAD_UNKNOWN, (gpointer) nevent2);
+        g_cond_signal (&mixer->waitcond);
+        g_mutex_unlock (&mixer->waitmutex);
+      }
+
+      break;
     case OMX_EventError:
       GST_ERROR_OBJECT (mixer, "OMX error event received: %s",
           gst_omx_error_to_str (nevent1));
@@ -880,6 +918,56 @@ freehandle:
         gst_omx_error_to_str (error));
     return error;
   }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_enable_ports (GstOmxVideoMixer * mixer)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxPad *omxpad;
+  GList *l;
+  gint i, index;
+
+  for (l = mixer->sinkpads, i = 0; l; l = l->next, i++) {
+    omxpad = GST_OMX_PAD (l->data);
+    index = OMX_VFPC_INPUT_PORT_START_INDEX + i;
+    g_mutex_lock (&_omx_mutex);
+    OMX_SendCommand (mixer->handle, OMX_CommandPortEnable, index, NULL);
+    g_mutex_unlock (&_omx_mutex);
+
+    GST_DEBUG_OBJECT (mixer, "Waiting for input port %d to enable", index);
+    error = gst_omx_video_mixer_wait_for_condition (mixer,
+        gst_omx_video_mixer_condition_enabled,
+        (gpointer) & omxpad->enabled, NULL);
+    if (GST_OMX_FAIL (error))
+      goto enable_failed;
+
+  }
+  for (l = mixer->srcpads, i = 0; l; l = l->next, i++) {
+
+    omxpad = GST_OMX_PAD (l->data);
+    index = OMX_VFPC_OUTPUT_PORT_START_INDEX + i;
+    g_mutex_lock (&_omx_mutex);
+    OMX_SendCommand (mixer->handle, OMX_CommandPortEnable, index, NULL);
+    g_mutex_unlock (&_omx_mutex);
+
+    GST_DEBUG_OBJECT (mixer, "Waiting for output port %d to enable", index);
+    error = gst_omx_video_mixer_wait_for_condition (mixer,
+        gst_omx_video_mixer_condition_enabled,
+        (gpointer) & omxpad->enabled, NULL);
+    if (GST_OMX_FAIL (error))
+      goto enable_failed;
+
+  }
+  return error;
+
+enable_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to enable port");
+    return error;
+  }
+
 }
 
 static OMX_ERRORTYPE
@@ -1087,6 +1175,11 @@ gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer)
 
   }
 
+  GST_DEBUG_OBJECT (mixer, "Enabling mixer ports");
+  error = gst_omx_video_mixer_enable_ports (mixer);
+  if (GST_OMX_FAIL (error))
+    goto error;
+
   GST_DEBUG_OBJECT (mixer, "Setting channels per handle");
   GST_OMX_INIT_STRUCT (&channels, OMX_PARAM_VFPC_NUMCHANNELPERHANDLE);
   channels.nNumChannelsPerHandle = mixer->sinkpad_count;
@@ -1147,4 +1240,95 @@ error:
   {
     return FALSE;
   }
+}
+
+/* Conditionals and control implementation*/
+OMX_ERRORTYPE
+gst_omx_video_mixer_wait_for_condition (GstOmxVideoMixer * mixer,
+    GstOmxVideoMixerCondition condition, gpointer arg1, gpointer arg2)
+{
+  guint64 endtime;
+
+  g_mutex_lock (&mixer->waitmutex);
+
+  endtime = g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND;
+
+  while (!condition (arg1, arg2))
+    if (!g_cond_wait_until (&mixer->waitcond, &mixer->waitmutex, endtime))
+      goto timeout;
+
+  GST_DEBUG_OBJECT (mixer, "Wait for condition successful");
+  g_mutex_unlock (&mixer->waitmutex);
+
+  return OMX_ErrorNone;
+
+timeout:
+  {
+    GST_WARNING_OBJECT (mixer, "Wait for condition timed out");
+    g_mutex_unlock (&mixer->waitmutex);
+    return OMX_ErrorTimeout;
+  }
+}
+
+gboolean
+gst_omx_video_mixer_condition_enabled (gpointer enabled, gpointer dummy)
+{
+  return *(gboolean *) enabled;
+}
+
+gboolean
+gst_omx_video_mixer_condition_disabled (gpointer enabled, gpointer dummy)
+{
+  return !*(gboolean *) enabled;
+}
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_for_each_pad (GstOmxVideoMixer * mixer,
+    GstOmxVideoMixerPadFunc func, GstPadDirection direction, gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstPad *pad;
+  GList *l;
+
+  if (direction == GST_PAD_SRC || direction == GST_PAD_UNKNOWN) {
+    for (l = mixer->srcpads; l; l = l->next) {
+      pad = l->data;
+      error = func (mixer, GST_OMX_PAD (pad), data);
+      if (GST_OMX_FAIL (error))
+        goto failed;
+    }
+  }
+
+  if (direction == GST_PAD_SINK || direction == GST_PAD_UNKNOWN) {
+    for (l = mixer->sinkpads; l; l = l->next) {
+      pad = l->data;
+      error = func (mixer, GST_OMX_PAD (pad), data);
+      if (GST_OMX_FAIL (error))
+        goto failed;
+    }
+  }
+
+  return error;
+
+failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Iterator failed on pad: %s:%s",
+        GST_DEBUG_PAD_NAME (pad));
+    return error;
+  }
+}
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_enable_pad (GstOmxVideoMixer * mixer, GstOmxPad * pad,
+    gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  guint32 padidx = (guint32) data;
+
+  if (padidx == GST_OMX_PAD_PORT (pad)->nPortIndex) {
+    GST_INFO_OBJECT (mixer, "Enabling port %s:%s", GST_DEBUG_PAD_NAME (pad));
+    pad->enabled = TRUE;
+  }
+
+  return error;
 }
