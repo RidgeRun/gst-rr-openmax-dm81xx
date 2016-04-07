@@ -1056,6 +1056,14 @@ gst_omx_video_mixer_dynamic_configuration (GstOmxVideoMixer * mixer,
   OMX_ERRORTYPE error = OMX_ErrorNone;
   OMX_CONFIG_VIDCHANNEL_RESOLUTION resolution;
 
+  if (mixerpad->crop_width == 0) {
+    mixerpad->crop_width = mixerpad->width;
+  }
+
+  if (mixerpad->crop_height == 0) {
+    mixerpad->crop_height = mixerpad->height;
+  }
+
   GST_DEBUG_OBJECT (mixer, "Set input channel %d resolution", id);
   GST_OMX_INIT_STRUCT (&resolution, OMX_CONFIG_VIDCHANNEL_RESOLUTION);
   resolution.Frm0Width = mixerpad->width;
