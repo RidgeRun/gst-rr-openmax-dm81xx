@@ -1090,7 +1090,7 @@ gst_omx_video_mixer_dynamic_configuration (GstOmxVideoMixer * mixer,
   resolution.Frm1Height = 0;
   resolution.Frm1Pitch = 0;
   resolution.FrmStartX = mixerpad->out_x * 2;
-  resolution.FrmStartY = mixerpad->out_y * 2;
+  resolution.FrmStartY = mixerpad->out_y;
   resolution.FrmCropWidth = 0;
   resolution.FrmCropHeight = 0;
   resolution.eDir = OMX_DirOutput;
