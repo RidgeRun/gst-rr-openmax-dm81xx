@@ -298,8 +298,6 @@ static void gst_omx_video_mixer_set_property (GObject * object, guint prop_id,
 static void gst_omx_video_mixer_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void gst_omx_video_mixer_finalize (GObject * object);
-static gboolean gst_omx_video_mixer_set_caps (GstPad * pad, GstCaps * caps);
-
 
 static GstPad *gst_omx_video_mixer_request_new_pad (GstElement * element,
     GstPadTemplate * templ, const gchar * req_name);
@@ -348,6 +346,12 @@ static OMX_ERRORTYPE gst_omx_video_mixer_for_each_pad (GstOmxVideoMixer * mixer,
 static OMX_ERRORTYPE gst_omx_video_mixer_enable_pad (GstOmxVideoMixer * mixer,
     GstOmxPad * pad, gpointer data);
 
+static gboolean gst_omx_video_mixer_create_push_task (GstOmxVideoMixer * mixer);
+static gboolean gst_omx_video_mixer_start_push_task (GstOmxVideoMixer * mixer);
+static gboolean gst_omx_video_mixer_stop_push_task (GstOmxVideoMixer * mixer);
+static gboolean gst_omx_video_mixer_destroy_push_task (GstOmxVideoMixer *
+    mixer);
+static void gst_omx_video_mixer_out_push_loop (void *data);
 
 static void
 _do_init (GType object_type)
@@ -416,7 +420,6 @@ static void
 gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
     GstOmxVideoMixerClass * g_class)
 {
-
   mixer->srcpad =
       GST_PAD (gst_omx_pad_new_from_template (gst_static_pad_template_get
           (&src_template), "src"));
@@ -438,6 +441,8 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   mixer->collect = gst_collect_pads2_new ();
   gst_collect_pads2_set_function (mixer->collect, (GstCollectPads2Function)
       GST_DEBUG_FUNCPTR (gst_omx_video_mixer_collected), mixer);
+
+  mixer->queue_buffers = gst_omx_buf_queue_new ();
 }
 
 static void
@@ -475,6 +480,9 @@ gst_omx_video_mixer_finalize (GObject * object)
   g_cond_clear (&mixer->waitcond);
 
   gst_object_unref (mixer->collect);
+
+  gst_omx_buf_queue_free (mixer->queue_buffers);
+
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -551,6 +559,9 @@ gst_omx_video_mixer_change_state (GstElement * element,
           gst_omx_video_mixer_allocate_omx (mixer, OMX_VIDEO_MIXER_HANDLE_NAME);
       if (GST_OMX_FAIL (error))
         goto allocate_fail;
+
+      if (!gst_omx_video_mixer_create_push_task (mixer))
+        goto task_failed;
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
       GST_LOG_OBJECT (mixer, "Starting collectpads");
@@ -560,6 +571,8 @@ gst_omx_video_mixer_change_state (GstElement * element,
       GST_LOG_OBJECT (mixer, "Stopping collectpads");
       mixer->closing = TRUE;
       gst_collect_pads2_stop (mixer->collect);
+      if (!gst_omx_video_mixer_stop_push_task (mixer))
+        goto task_failed;
       gst_omx_video_mixer_stop (mixer);
       mixer->started = FALSE;
       gst_omx_video_mixer_free_dummy_sink_pads (mixer);
@@ -575,6 +588,9 @@ gst_omx_video_mixer_change_state (GstElement * element,
 
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_omx_video_mixer_free_omx (mixer);
+
+      if (!gst_omx_video_mixer_destroy_push_task (mixer))
+        goto task_failed;
       break;
     default:
       break;
@@ -585,6 +601,10 @@ allocate_fail:
   {
     GST_ELEMENT_ERROR (mixer, LIBRARY,
         INIT, (gst_omx_error_to_str (error)), (NULL));
+    return GST_STATE_CHANGE_FAILURE;
+  }
+task_failed:
+  {
     return GST_STATE_CHANGE_FAILURE;
   }
 }
@@ -715,6 +735,9 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
     if (GST_OMX_FAIL (gst_omx_video_mixer_start (mixer)))
       goto start_failed;
 
+    if (!gst_omx_video_mixer_start_push_task (mixer))
+        goto task_failed;
+
     GST_OBJECT_LOCK (mixer);
     mixer->started = TRUE;
     GST_OBJECT_UNLOCK (mixer);
@@ -776,6 +799,11 @@ init_ports_failed:
 start_failed:
   {
     GST_ERROR_OBJECT (mixer, "Failed to start omx component");
+    return GST_FLOW_ERROR;
+  }
+task_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to start output task");
     return GST_FLOW_ERROR;
   }
 free_buffer_failed:
@@ -925,8 +953,10 @@ gst_omx_video_mixer_fill_callback (OMX_HANDLETYPE handle,
     gpointer data, OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
+  OMX_BUFFERHEADERTYPE *omxbuf;
   OMX_ERRORTYPE error = OMX_ErrorNone;
   GstOmxBufferData *bufdata;
+  gboolean busy;
 
   bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
 
@@ -936,13 +966,26 @@ gst_omx_video_mixer_fill_callback (OMX_HANDLETYPE handle,
   GST_LOG_OBJECT (mixer, "Fill buffer callback for buffer %p->%p", outbuf,
       outbuf->pBuffer);
 
-  error = mixer->component->FillThisBuffer (mixer->handle, outbuf);
+  gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
+  if (busy)
+    goto illegal;
+
+  gst_omx_buf_tab_use_buffer (bufdata->pad->buffers, outbuf);
+
+  error = gst_omx_buf_queue_push_buffer (mixer->queue_buffers, outbuf);
 
   return error;
 
 discard:
   {
     GST_DEBUG_OBJECT (mixer, "Discarding buffer %d", bufdata->id);
+    return error;
+  }
+illegal:
+  {
+    GST_ERROR_OBJECT (mixer,
+        "Double fill callback for buffer %p->%p, this should not happen",
+        outbuf, outbuf->pBuffer);
     return error;
   }
 
@@ -1921,4 +1964,120 @@ gst_omx_video_mixer_enable_pad (GstOmxVideoMixer * mixer, GstOmxPad * pad,
   }
 
   return error;
+}
+
+/* Output tasks*/
+static gboolean
+gst_omx_video_mixer_create_push_task (GstOmxVideoMixer * mixer)
+{
+  GST_INFO_OBJECT (mixer, "Creating Push task...");
+  mixer->pushtask =
+      gst_task_create (gst_omx_video_mixer_out_push_loop, (gpointer) mixer);
+
+  if (!mixer->pushtask) {
+    GST_ERROR_OBJECT (mixer, "Failed to create Push task");
+    return FALSE;
+  }
+
+  g_static_rec_mutex_init (&mixer->taskmutex);
+  gst_task_set_lock (mixer->pushtask, &mixer->taskmutex);
+  GST_INFO_OBJECT (mixer, "Push task created");
+  return TRUE;
+}
+
+static gboolean
+gst_omx_video_mixer_start_push_task (GstOmxVideoMixer * mixer)
+{
+  gst_omx_buf_queue_release (mixer->queue_buffers, FALSE);
+
+  GST_INFO_OBJECT (mixer, "Starting push task... ");
+  if (!gst_task_start (mixer->pushtask)) {
+    GST_WARNING_OBJECT (mixer, "Failed to start push task");
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (mixer, "Push task started");
+  return TRUE;
+}
+
+static gboolean
+gst_omx_video_mixer_stop_push_task (GstOmxVideoMixer * mixer)
+{
+  GST_INFO_OBJECT (mixer, "Stopping task on srcpad...");
+
+  gst_omx_buf_queue_release (mixer->queue_buffers, TRUE);
+
+  if (!gst_task_join (mixer->pushtask)) {
+    GST_WARNING_OBJECT (mixer, "Failed stop task ");
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (mixer, "Finished push task");
+
+  return TRUE;
+}
+
+static gboolean
+gst_omx_video_mixer_destroy_push_task (GstOmxVideoMixer * mixer)
+{
+  GST_INFO_OBJECT (mixer, "Stopping task on srcpad...");
+
+  if (gst_task_get_state (mixer->pushtask) != GST_TASK_STOPPED) {
+    gst_omx_video_mixer_stop_push_task (mixer);
+    return FALSE;
+  }
+  GST_INFO_OBJECT (mixer, "Unref push task");
+  gst_object_unref (mixer->pushtask);
+  GST_INFO_OBJECT (mixer, "Finished task on srcpad");
+
+  return TRUE;
+}
+
+
+static void
+gst_omx_video_mixer_out_push_loop (void *data)
+{
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
+  OMX_BUFFERHEADERTYPE *omxbuf = NULL;
+  OMX_ERRORTYPE error;
+  GstOmxBufferData *bufdata = NULL;
+  gboolean closing;
+
+  GST_LOG_OBJECT (mixer, "Entering push task");
+
+  GST_OBJECT_LOCK (mixer);
+  closing = mixer->closing;
+  GST_OBJECT_UNLOCK (mixer);
+
+  if (closing) {
+    goto discard;
+  }
+
+  omxbuf = gst_omx_buf_queue_pop_buffer_check_release (mixer->queue_buffers);
+  if (!omxbuf) {
+    goto timeout;
+  }
+  bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
+
+
+  gst_omx_buf_tab_return_buffer (bufdata->pad->buffers, omxbuf);
+
+  g_mutex_lock (&_omx_mutex);
+  error = mixer->component->FillThisBuffer (mixer->handle, omxbuf);
+  g_mutex_unlock (&_omx_mutex);
+
+  return;
+
+discard:
+  {
+    GST_INFO_OBJECT (mixer, "Discarding buffer closing");
+    return;
+  }
+timeout:
+  {
+    GST_ERROR_OBJECT (mixer, "Cannot acquire output buffer from pending queue");
+    return;
+  }
+
+
 }

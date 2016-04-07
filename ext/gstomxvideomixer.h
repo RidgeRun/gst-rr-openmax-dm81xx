@@ -56,6 +56,11 @@ struct _GstOmxVideoMixer
   gboolean started;
   gboolean closing;
 
+  /* Output buffers queue */
+  GstOmxBufQueue *queue_buffers;
+  GstTask *pushtask;
+  GStaticRecMutex taskmutex;
+
   /* Caps */
   guint src_width;
   guint src_height;
