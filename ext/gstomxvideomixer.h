@@ -75,6 +75,8 @@ struct _GstOmxVideoMixer
   OMX_COMPONENTTYPE *component;
   OMX_CALLBACKTYPE *callbacks;
   OMX_STATETYPE state;
+  guint *out_count;
+  OMX_BUFFERHEADERTYPE ***out_ptr_list;
 
   /* Conditions */
   GMutex waitmutex;
