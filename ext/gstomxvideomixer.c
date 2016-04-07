@@ -325,6 +325,8 @@ static OMX_ERRORTYPE gst_omx_video_mixer_alloc_buffers (GstOmxVideoMixer *
     mixer, GstOmxPad * pad, gpointer data);
 static OMX_ERRORTYPE gst_omx_video_mixer_free_buffers (GstOmxVideoMixer * mixer,
     GstOmxPad * pad, gpointer data);
+static OMX_ERRORTYPE gst_omx_video_mixer_push_buffers (GstOmxVideoMixer * mixer,
+    GstOmxPad * pad, gpointer data);
 
 static void gst_omx_video_mixer_child_proxy_init (gpointer g_iface,
     gpointer iface_data);
@@ -423,6 +425,8 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   GST_INFO_OBJECT (mixer, "Initializing %s", GST_OBJECT_NAME (mixer));
 
   mixer->started = FALSE;
+  mixer->closing = FALSE;
+
   mixer->input_buffers = DEFAULT_VIDEO_MIXER_NUM_INPUT_BUFFERS;
   mixer->output_buffers = DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS;
   mixer->sinkpads = NULL;
@@ -554,10 +558,11 @@ gst_omx_video_mixer_change_state (GstElement * element,
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       GST_LOG_OBJECT (mixer, "Stopping collectpads");
+      mixer->closing = TRUE;
       gst_collect_pads2_stop (mixer->collect);
       gst_omx_video_mixer_stop (mixer);
-      gst_omx_video_mixer_free_dummy_sink_pads (mixer);
       mixer->started = FALSE;
+      gst_omx_video_mixer_free_dummy_sink_pads (mixer);
       break;
     default:
       break;
@@ -691,7 +696,12 @@ done:
 static GstFlowReturn
 gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 {
+  OMX_BUFFERHEADERTYPE *omxbuf;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
   GstFlowReturn ret = GST_FLOW_OK;
+  GstOmxBufferData *bufdata = NULL;
+  GstOmxPad *omxpad;
+  GstBuffer *buffer;
   GSList *l;
 
   if (!mixer->started) {
@@ -713,17 +723,41 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
   GST_DEBUG_OBJECT (mixer, "Entering collected");
   for (l = mixer->collect->data; l; l = l->next) {
     GstCollectData2 *data;
-    GstBuffer *buffer;
 
     data = (GstCollectData2 *) l->data;
     buffer = gst_collect_pads2_pop (mixer->collect, data);
 
     if (buffer) {
-      GstOmxPad *omxpad = GST_OMX_PAD (data->pad);
+      omxpad = GST_OMX_PAD (data->pad);
 
       GST_LOG_OBJECT (omxpad, "Got buffer %p with timestamp %" GST_TIME_FORMAT,
           buffer, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
-      gst_buffer_unref (buffer);
+
+      GST_LOG_OBJECT (mixer, "Not an OMX buffer, requesting a free buffer");
+      error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
+      if (GST_OMX_FAIL (error))
+        goto free_buffer_failed;
+      gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
+      GST_LOG_OBJECT (mixer, "Received buffer %p, copying data", omxbuf);
+      memcpy (omxbuf->pBuffer, GST_BUFFER_DATA (buffer),
+          GST_BUFFER_SIZE (buffer));
+
+      omxbuf->nFilledLen = GST_BUFFER_SIZE (buffer);
+      omxbuf->nOffset = 0;
+      omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buffer);
+
+      bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
+      bufdata->buffer = buffer;
+
+      GST_LOG_OBJECT (mixer, "Emptying buffer %d %p %p->%p", bufdata->id,
+          bufdata, omxbuf, omxbuf->pBuffer);
+      g_mutex_lock (&_omx_mutex);
+      error = mixer->component->EmptyThisBuffer (mixer->handle, omxbuf);
+      g_mutex_unlock (&_omx_mutex);
+      if (GST_OMX_FAIL (error)) {
+        goto empty_error;
+      }
+
     }
   }
 
@@ -744,6 +778,21 @@ start_failed:
     GST_ERROR_OBJECT (mixer, "Failed to start omx component");
     return GST_FLOW_ERROR;
   }
+free_buffer_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to get a free buffer: %s",
+        gst_omx_error_to_str (error));
+    gst_buffer_unref (buffer);
+    return GST_FLOW_ERROR;
+  }
+empty_error:
+  {
+    GST_ELEMENT_ERROR (mixer, LIBRARY, ENCODE, (gst_omx_error_to_str (error)),
+        (NULL));
+    gst_buffer_unref (buffer);  /*If Empty this buffer is not successful we have to unref the buffer manually */
+    return GST_FLOW_ERROR;
+  }
+
 }
 
 gboolean
@@ -870,6 +919,69 @@ gst_omx_video_mixer_event_callback (OMX_HANDLETYPE handle,
   return error;
 }
 
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_fill_callback (OMX_HANDLETYPE handle,
+    gpointer data, OMX_BUFFERHEADERTYPE * outbuf)
+{
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBufferData *bufdata;
+
+  bufdata = (GstOmxBufferData *) outbuf->pAppPrivate;
+
+  if (mixer->closing)
+    goto discard;
+
+  GST_LOG_OBJECT (mixer, "Fill buffer callback for buffer %p->%p", outbuf,
+      outbuf->pBuffer);
+
+  error = mixer->component->FillThisBuffer (mixer->handle, outbuf);
+
+  return error;
+
+discard:
+  {
+    GST_DEBUG_OBJECT (mixer, "Discarding buffer %d", bufdata->id);
+    return error;
+  }
+
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_empty_callback (OMX_HANDLETYPE handle,
+    gpointer data, OMX_BUFFERHEADERTYPE * buffer)
+{
+  GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (data);
+  GstOmxBufferData *bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
+  GstBuffer *gstbuf = bufdata->buffer;
+  GstOmxPad *pad = bufdata->pad;
+  guint8 id = bufdata->id;
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+
+  GST_LOG_OBJECT (mixer, "Empty buffer callback for buffer %d %p->%p->%p", id,
+      buffer, buffer->pBuffer, bufdata);
+
+  bufdata->buffer = NULL;
+  /*We need to return the buffer first in order to avoid race condition */
+  error = gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
+  if (GST_OMX_FAIL (error))
+    goto noreturn;
+
+  gst_buffer_unref (gstbuf);
+  return error;
+
+noreturn:
+  {
+    GST_ELEMENT_ERROR (mixer, LIBRARY, ENCODE,
+        ("Unable to return buffer to buftab: %s",
+            gst_omx_error_to_str (error)), (NULL));
+    buffer->pAppPrivate = NULL;
+    return error;
+  }
+}
+
 static OMX_ERRORTYPE
 gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
 {
@@ -886,6 +998,10 @@ gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
 
   mixer->callbacks->EventHandler =
       (GstOmxEventHandler) gst_omx_video_mixer_event_callback;
+  mixer->callbacks->EmptyBufferDone =
+      (GstOmxEmptyBufferDone) gst_omx_video_mixer_empty_callback;
+  mixer->callbacks->FillBufferDone =
+      (GstOmxFillBufferDone) gst_omx_video_mixer_fill_callback;
 
   if (!handle_name) {
     error = OMX_ErrorInvalidComponentName;
@@ -897,6 +1013,8 @@ gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer, gchar * handle_name)
   g_mutex_unlock (&_omx_mutex);
   if ((error != OMX_ErrorNone) || (!mixer->handle))
     goto nohandle;
+
+  mixer->component = (OMX_COMPONENTTYPE *) mixer->handle;
 
   return error;
 
@@ -1537,6 +1655,12 @@ gst_omx_video_mixer_start (GstOmxVideoMixer * mixer)
   if (GST_OMX_FAIL (error))
     goto exec_failed;
 
+  GST_INFO_OBJECT (mixer, "Pushing output buffers");
+  error =
+      gst_omx_video_mixer_for_each_pad (mixer, gst_omx_video_mixer_push_buffers,
+      GST_PAD_SRC, NULL);
+  if (GST_OMX_FAIL (error))
+    goto push_failed;
 
   mixer->started = TRUE;
 
@@ -1558,6 +1682,11 @@ alloc_failed:
 exec_failed:
   {
     GST_ERROR_OBJECT (mixer, "Unable to set component to Executing");
+    return error;
+  }
+push_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Unable to push buffer into the output port");
     return error;
   }
 }
@@ -1632,6 +1761,64 @@ free_failed:
     GST_ERROR_OBJECT (mixer, "Unable to free buffers: %s",
         gst_omx_error_to_str (error));
     return error;
+  }
+}
+
+
+static OMX_ERRORTYPE
+gst_omx_video_mixer_push_buffers (GstOmxVideoMixer * mixer, GstOmxPad * pad,
+    gpointer data)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  OMX_BUFFERHEADERTYPE *buffer;
+  GstOmxBufTabNode *node;
+  guint i;
+  GList *buffers;
+
+  if (GST_PAD_SINK == GST_PAD (pad)->direction)
+    goto sinkpad;
+
+  buffers = pad->buffers->table;
+
+  for (i = 0; i < pad->port->nBufferCountActual; ++i) {
+
+    if (!buffers)
+      goto short_read;
+
+    node = (GstOmxBufTabNode *) buffers->data;
+    buffer = node->buffer;
+
+    GST_DEBUG_OBJECT (pad, "Pushing buffer number %u: %p of size %d", i,
+        buffer, (int) buffer->nAllocLen);
+
+    g_mutex_lock (&_omx_mutex);
+    error = mixer->component->FillThisBuffer (mixer->handle, buffer);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error))
+      goto push_failed;
+
+    buffers = g_list_next (buffers);
+  }
+
+  return error;
+
+sinkpad:
+  {
+    GST_DEBUG_OBJECT (mixer, "Skipping sink pad %s:%s",
+        GST_DEBUG_PAD_NAME (GST_PAD (pad)));
+    return error;
+  }
+push_failed:
+  {
+    GST_ERROR_OBJECT (mixer, "Failed to push buffers");
+    /*TODO: should I free buffers? */
+    return error;
+  }
+short_read:
+  {
+    GST_ERROR_OBJECT (mixer, "Malformed output buffer list");
+    /*TODO: should I free buffers? */
+    return OMX_ErrorResourcesLost;
   }
 }
 

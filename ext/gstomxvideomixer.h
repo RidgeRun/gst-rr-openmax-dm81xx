@@ -54,6 +54,7 @@ struct _GstOmxVideoMixer
   GstCollectPads2 *collect;
 
   gboolean started;
+  gboolean closing;
 
   /* Caps */
   guint src_width;
@@ -66,6 +67,7 @@ struct _GstOmxVideoMixer
 
   /* Omx */
   OMX_HANDLETYPE handle;
+  OMX_COMPONENTTYPE *component;
   OMX_CALLBACKTYPE *callbacks;
   OMX_STATETYPE state;
 
