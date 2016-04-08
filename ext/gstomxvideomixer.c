@@ -285,11 +285,13 @@ enum
   PROP_0,
   PROP_NUM_OUTPUT_BUFFERS,
   PROP_NUM_INPUT_BUFFERS,
+  PROP_UPDATE_SETTINGS,
 };
 
 #define OMX_VIDEO_MIXER_HANDLE_NAME   "OMX.TI.VPSSM3.VFPC.INDTXSCWB"
 #define DEFAULT_VIDEO_MIXER_NUM_INPUT_BUFFERS    8
 #define DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS   8
+#define DEFAULT_VIDEO_MIXER_UPDATE_SETTINGS      FALSE
 
 static void _do_init (GType object_type);
 GST_BOILERPLATE_FULL (GstOmxVideoMixer, gst_omx_video_mixer, GstElement,
@@ -323,6 +325,8 @@ static OMX_ERRORTYPE gst_omx_video_mixer_allocate_omx (GstOmxVideoMixer * mixer,
     gchar * handle_name);
 static OMX_ERRORTYPE gst_omx_video_mixer_free_omx (GstOmxVideoMixer * mixer);
 static OMX_ERRORTYPE gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer);
+static OMX_ERRORTYPE gst_omx_video_mixer_update_configuration (GstOmxVideoMixer
+    * mixer);
 static OMX_ERRORTYPE gst_omx_video_mixer_start (GstOmxVideoMixer * mixer);
 static OMX_ERRORTYPE gst_omx_video_mixer_stop (GstOmxVideoMixer * mixer);
 static OMX_ERRORTYPE gst_omx_video_mixer_alloc_buffers (GstOmxVideoMixer *
@@ -416,6 +420,11 @@ gst_omx_video_mixer_class_init (GstOmxVideoMixerClass * klass)
           "OMX output buffers number",
           1, 20, DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS, G_PARAM_READWRITE));
 
+  g_object_class_install_property (gobject_class, PROP_UPDATE_SETTINGS,
+      g_param_spec_boolean ("update", "Update settings",
+          "Indicate if the mixer should update its channels settings",
+          DEFAULT_VIDEO_MIXER_UPDATE_SETTINGS, G_PARAM_WRITABLE));
+
   /* Register the pad class */
   (void) (GST_TYPE_OMX_VIDEO_MIXER_PAD);
 
@@ -469,6 +478,7 @@ gst_omx_video_mixer_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (object);
+  OMX_ERRORTYPE error;
 
   switch (prop_id) {
     case PROP_NUM_INPUT_BUFFERS:
@@ -480,6 +490,14 @@ gst_omx_video_mixer_set_property (GObject * object, guint prop_id,
       mixer->output_buffers = g_value_get_uint (value);
       GST_INFO_OBJECT (mixer, "Setting output-buffers to %d",
           mixer->output_buffers);
+      break;
+    case PROP_UPDATE_SETTINGS:
+      if (!mixer->started)
+        break;
+
+      error = gst_omx_video_mixer_update_configuration (mixer);
+      if (GST_OMX_FAIL (error))
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1471,7 +1489,35 @@ chresolution_failed:
 
 }
 
+static OMX_ERRORTYPE
+gst_omx_video_mixer_update_configuration (GstOmxVideoMixer * mixer)
+{
+  OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxPad *omxpad;
+  GstOmxVideoMixerPad *mixerpad;
+  GList *l;
+  guint i;
 
+  for (l = mixer->sinkpads, i = 0; l; l = l->next, i++) {
+    omxpad = l->data;
+    mixerpad = GST_OMX_VIDEO_MIXER_PAD (omxpad);
+
+    GST_INFO_OBJECT (mixerpad, "Updating dynamic configuration");
+
+    error = gst_omx_video_mixer_dynamic_configuration (mixer, mixerpad, i);
+    if (GST_OMX_FAIL (error))
+      goto error;
+  }
+
+  return error;
+
+error:
+  {
+    GST_WARNING_OBJECT (mixerpad, "Failed to update channel configuration: %s",
+        gst_omx_error_to_str (error));
+    return error;
+  }
+}
 
 static OMX_ERRORTYPE
 gst_omx_video_mixer_init_ports (GstOmxVideoMixer * mixer)
