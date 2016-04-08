@@ -596,7 +596,6 @@ gst_omx_video_mixer_release_pad (GstElement * element, GstPad * pad)
   gst_element_remove_pad (element, pad);
 }
 
-
 static GstStateChangeReturn
 gst_omx_video_mixer_change_state (GstElement * element,
     GstStateChange transition)
@@ -843,6 +842,7 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
   GstOmxPad *omxpad;
   GstBuffer *buffer;
   GSList *l;
+  gboolean eos = TRUE;
 
   if (!mixer->started) {
 
@@ -877,6 +877,7 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
     if (!buffer)
       continue;
 
+    eos = FALSE;
     omxpad = GST_OMX_PAD (data->pad);
 
     GST_LOG_OBJECT (omxpad, "Got buffer %p with timestamp %" GST_TIME_FORMAT,
@@ -934,6 +935,12 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
     if (GST_OMX_FAIL (error)) {
       goto empty_error;
     }
+  }
+
+  if (eos) {
+    GST_DEBUG_OBJECT (mixer, "All sinkpads are EOS, forwarding ...");
+    gst_pad_push_event (mixer->srcpad, gst_event_new_eos ());
+    ret = GST_FLOW_UNEXPECTED;
   }
 
   return ret;
