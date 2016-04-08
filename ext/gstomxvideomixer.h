@@ -63,8 +63,8 @@ struct _GstOmxVideoMixer
   GstFlowReturn push_ret;
 
   /* Caps */
-  guint src_width;
-  guint src_height;
+  gint src_width;
+  gint src_height;
   guint src_stride;
 
   /* Properties */
