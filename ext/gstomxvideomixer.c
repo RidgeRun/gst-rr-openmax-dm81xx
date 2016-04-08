@@ -441,6 +441,7 @@ gst_omx_video_mixer_init (GstOmxVideoMixer * mixer,
   mixer->srcpads = NULL;
   mixer->out_count = NULL;
   mixer->out_ptr_list = NULL;
+  mixer->push_ret = GST_FLOW_OK;
 
   g_mutex_init (&mixer->waitmutex);
   g_cond_init (&mixer->waitcond);
@@ -566,11 +567,11 @@ gst_omx_video_mixer_change_state (GstElement * element,
           gst_omx_video_mixer_allocate_omx (mixer, OMX_VIDEO_MIXER_HANDLE_NAME);
       if (GST_OMX_FAIL (error))
         goto allocate_fail;
-
       if (!gst_omx_video_mixer_create_push_task (mixer))
         goto task_failed;
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
+      mixer->closing = FALSE;
       GST_LOG_OBJECT (mixer, "Starting collectpads");
       gst_collect_pads2_start (mixer->collect);
       break;
@@ -583,9 +584,9 @@ gst_omx_video_mixer_change_state (GstElement * element,
       gst_omx_video_mixer_clear_queue (mixer);
       gst_omx_video_mixer_stop (mixer);
       mixer->started = FALSE;
+      mixer->push_ret = GST_FLOW_OK;
       gst_omx_video_mixer_free_dummy_sink_pads (mixer);
       gst_omx_video_mixer_free_outbuf_check (mixer);
-
       break;
     default:
       break;
@@ -820,6 +821,10 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
   }
 
   GST_DEBUG_OBJECT (mixer, "Entering collected");
+
+  if (mixer->push_ret)
+    goto push_error;
+
   for (l = mixer->collect->data; l; l = l->next) {
     data = (GstCollectData2 *) l->data;
     buffer = gst_collect_pads2_pop (mixer->collect, data);
@@ -907,6 +912,12 @@ task_failed:
   {
     GST_ERROR_OBJECT (mixer, "Failed to start output task");
     return GST_FLOW_ERROR;
+  }
+push_error:
+  {
+    GST_DEBUG_OBJECT (mixer, "Push error %s",
+        gst_flow_get_name (mixer->push_ret));
+    return mixer->push_ret;
   }
 not_found:
   {
@@ -1862,6 +1873,8 @@ gst_omx_video_mixer_start (GstOmxVideoMixer * mixer)
 
   mixer->started = TRUE;
 
+  return error;
+
 already_started:
   {
     GST_WARNING_OBJECT (mixer, "Component already started");
@@ -2289,7 +2302,7 @@ gst_omx_video_mixer_out_push_loop (void *data)
 
   GST_LOG_OBJECT (mixer, "Pushing buffer %p->%p to %s:%s",
       omxbuf, omxbuf->pBuffer, GST_DEBUG_PAD_NAME (mixer->srcpad));
-  ret = gst_pad_push (mixer->srcpad, buffer);
+  mixer->push_ret = gst_pad_push (mixer->srcpad, buffer);
   if (GST_FLOW_OK != ret)
     goto push_failed;
 
@@ -2303,11 +2316,13 @@ discard:
 no_caps:
   {
     GST_ERROR_OBJECT (mixer, "Unable get caps from pad");
+    mixer->push_ret = GST_FLOW_NOT_NEGOTIATED;
     return;
   }
 timeout:
   {
     GST_ERROR_OBJECT (mixer, "Cannot acquire output buffer from pending queue");
+    mixer->push_ret = GST_FLOW_ERROR;
     return;
   }
 alloc_failed:

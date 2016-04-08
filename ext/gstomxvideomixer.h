@@ -60,6 +60,7 @@ struct _GstOmxVideoMixer
   GstOmxBufQueue *queue_buffers;
   GstTask *pushtask;
   GStaticRecMutex taskmutex;
+  GstFlowReturn push_ret;
 
   /* Caps */
   guint src_width;
