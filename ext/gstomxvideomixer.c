@@ -67,6 +67,8 @@ struct _GstOmxVideoMixerPad
   guint width;
   guint height;
   guint stride;
+  gint fps_n;
+  gint fps_d;
 
   /* Properties */
   guint out_x;
@@ -671,6 +673,7 @@ gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps)
   GstVideoFormat fmt;
   GstStructure *s;
   gint width, height;
+  gint fps_n = 0, fps_d = 0;
 
   GST_INFO_OBJECT (pad, "Setting caps %" GST_PTR_FORMAT, caps);
 
@@ -687,6 +690,13 @@ gst_omx_video_mixer_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_structure_get_uint (s, "stride", &omxpad->stride))
     omxpad->stride = omxpad->width;
 
+  if (gst_structure_has_field (s, "framerate")
+      && !gst_video_parse_caps_framerate (caps, &fps_n, &fps_d))
+    goto parse_failed;
+
+  omxpad->fps_d = fps_d;
+  omxpad->fps_n = fps_n;
+
   return TRUE;
 
 parse_failed:
@@ -702,6 +712,7 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
 {
   GList *l;
   guint min_width = 0, min_height = 0;
+  guint best_fps_n = 0, best_fps_d = 0;
   GstStructure *s;
   GstCaps *caps, *peercaps;
   gboolean ret = FALSE;
@@ -711,6 +722,7 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
   for (l = mixer->sinkpads; l; l = l->next) {
     GstOmxVideoMixerPad *omxpad = l->data;
     guint cur_width = 0, cur_height = 0;
+    gdouble best_fps = -1, cur_fps;
 
     if (!omxpad->width || !omxpad->height) {
       GST_WARNING_OBJECT (mixer,
@@ -726,6 +738,17 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
       min_width = cur_width;
     if (min_height < cur_height)
       min_height = cur_height;
+
+    if (omxpad->fps_d == 0)
+      cur_fps = 0.0;
+    else
+      gst_util_fraction_to_double (omxpad->fps_n, omxpad->fps_d, &cur_fps);
+    if (best_fps < cur_fps) {
+      best_fps = cur_fps;
+      best_fps_n = omxpad->fps_n;
+      best_fps_d = omxpad->fps_d;
+    }
+
   }
 
   /* Set src caps */
@@ -735,7 +758,8 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
 
     caps = gst_video_format_new_caps_simple (GST_VIDEO_FORMAT_YUY2, 0,
         "width", GST_TYPE_INT_RANGE, min_width, G_MAXINT,
-        "height", GST_TYPE_INT_RANGE, min_height, G_MAXINT, NULL);
+        "height", GST_TYPE_INT_RANGE, min_height, G_MAXINT,
+        "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
 
     tmp = gst_caps_intersect (caps, peercaps);
     gst_caps_unref (caps);
@@ -751,6 +775,8 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
     s = gst_caps_get_structure (caps, 0);
     gst_structure_fixate_field_nearest_int (s, "width", min_width);
     gst_structure_fixate_field_nearest_int (s, "height", min_height);
+    gst_structure_fixate_field_nearest_fraction (s, "framerate", best_fps_n,
+        best_fps_d);
 
     gst_structure_get_int (s, "width", &mixer->src_width);
     gst_structure_get_int (s, "height", &mixer->src_height);
