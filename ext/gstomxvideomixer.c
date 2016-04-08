@@ -1821,6 +1821,7 @@ gst_omx_video_mixer_free_buffers (GstOmxVideoMixer * mixer, GstOmxPad * pad,
   GstOmxBufTabNode *node;
   guint i;
   GList *buffers;
+  GstOmxBufferData *bufdata;
 
   buffers = pad->buffers->table;
 
@@ -1835,6 +1836,13 @@ gst_omx_video_mixer_free_buffers (GstOmxVideoMixer * mixer, GstOmxPad * pad,
 
     node = (GstOmxBufTabNode *) buffers->data;
     buffer = node->buffer;
+    bufdata = (GstOmxBufferData *) buffer->pAppPrivate;
+
+    if (node->busy && mixer->out_count[bufdata->id] > 0) {
+      gst_omx_buf_tab_return_buffer (pad->buffers, buffer);
+      mixer->out_count[bufdata->id]--;
+      GST_DEBUG_OBJECT (pad, "Returning buffer %d", bufdata->id);
+    }
 
     GST_DEBUG_OBJECT (mixer, "Freeing %s:%s buffer number %u: %p",
         GST_DEBUG_PAD_NAME (pad), i, buffer);
