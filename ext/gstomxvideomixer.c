@@ -1164,8 +1164,8 @@ gst_omx_video_mixer_fill_callback (OMX_HANDLETYPE handle,
   if (mixer->closing)
     goto discard;
 
-  GST_LOG_OBJECT (mixer, "Fill buffer callback for buffer %p->%p", outbuf,
-      outbuf->pBuffer);
+  GST_LOG_OBJECT (bufdata->pad, "Fill buffer callback for buffer %d: %p->%p",
+      bufdata->id, outbuf, outbuf->pBuffer);
 
   /* Find buffer and mark it as busy */
   gst_omx_buf_tab_find_buffer (bufdata->pad->buffers, outbuf, &omxbuf, &busy);
@@ -1845,7 +1845,7 @@ gst_omx_video_mixer_free_buffers (GstOmxVideoMixer * mixer, GstOmxPad * pad,
     }
 
     GST_DEBUG_OBJECT (mixer, "Freeing %s:%s buffer number %u: %p",
-        GST_DEBUG_PAD_NAME (pad), i, buffer);
+        GST_DEBUG_PAD_NAME (pad), bufdata->id, buffer);
 
     error = gst_omx_buf_tab_remove_buffer (pad->buffers, buffer);
     if (GST_OMX_FAIL (error))
@@ -2332,9 +2332,11 @@ gst_omx_video_mixer_release_buffer (gpointer data)
    * with index bufid for each output port */
   for (i = 0; i < mixer->sinkpad_count; i++) {
     omxbuf = mixer->out_ptr_list[bufid][i];
-    omxpad = ((GstOmxBufferData *) omxbuf->pAppPrivate)->pad;
+    bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
+    omxpad = bufdata->pad;
 
-    GST_LOG_OBJECT (omxpad, "Returning buffer %p to table", omxbuf);
+    GST_LOG_OBJECT (omxpad, "Returning buffer %d:%p to table", bufdata->id,
+        omxbuf);
 
     error = gst_omx_buf_tab_return_buffer (omxpad->buffers, omxbuf);
     if (GST_OMX_FAIL (error))
@@ -2411,7 +2413,7 @@ gst_omx_video_mixer_out_push_loop (void *data)
   GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
   bufdata->buffer = buffer;
 
-  GST_LOG_OBJECT (mixer, "Pushing buffer %p->%p to %s:%s",
+  GST_LOG_OBJECT (mixer, "Pushing buffer %d %p->%p to %s:%s", bufdata->id,
       omxbuf, omxbuf->pBuffer, GST_DEBUG_PAD_NAME (mixer->srcpad));
   mixer->push_ret = gst_pad_push (mixer->srcpad, buffer);
   if (GST_FLOW_OK != ret)
