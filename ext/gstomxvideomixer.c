@@ -283,6 +283,8 @@ enum
 enum
 {
   PROP_0,
+  PROP_NUM_OUTPUT_BUFFERS,
+  PROP_NUM_INPUT_BUFFERS,
 };
 
 #define OMX_VIDEO_MIXER_HANDLE_NAME   "OMX.TI.VPSSM3.VFPC.INDTXSCWB"
@@ -404,6 +406,15 @@ gst_omx_video_mixer_class_init (GstOmxVideoMixerClass * klass)
   gobject_class->get_property = gst_omx_video_mixer_get_property;
   gobject_class->finalize = gst_omx_video_mixer_finalize;
 
+  g_object_class_install_property (gobject_class, PROP_NUM_INPUT_BUFFERS,
+      g_param_spec_uint ("input-buffers", "Input buffers",
+          "OMX input buffers number",
+          1, 20, DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_NUM_OUTPUT_BUFFERS,
+      g_param_spec_uint ("output-buffers", "Output buffers",
+          "OMX output buffers number",
+          1, 20, DEFAULT_VIDEO_MIXER_NUM_OUTPUT_BUFFERS, G_PARAM_READWRITE));
 
   /* Register the pad class */
   (void) (GST_TYPE_OMX_VIDEO_MIXER_PAD);
@@ -460,6 +471,16 @@ gst_omx_video_mixer_set_property (GObject * object, guint prop_id,
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (object);
 
   switch (prop_id) {
+    case PROP_NUM_INPUT_BUFFERS:
+      mixer->input_buffers = g_value_get_uint (value);
+      GST_INFO_OBJECT (mixer, "Setting input-buffers to %d",
+          mixer->input_buffers);
+      break;
+    case PROP_NUM_OUTPUT_BUFFERS:
+      mixer->output_buffers = g_value_get_uint (value);
+      GST_INFO_OBJECT (mixer, "Setting output-buffers to %d",
+          mixer->output_buffers);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -473,6 +494,12 @@ gst_omx_video_mixer_get_property (GObject * object, guint prop_id,
   GstOmxVideoMixer *mixer = GST_OMX_VIDEO_MIXER (object);
 
   switch (prop_id) {
+    case PROP_NUM_INPUT_BUFFERS:
+      g_value_set_uint (value, mixer->input_buffers);
+      break;
+    case PROP_NUM_OUTPUT_BUFFERS:
+      g_value_set_uint (value, mixer->output_buffers);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
