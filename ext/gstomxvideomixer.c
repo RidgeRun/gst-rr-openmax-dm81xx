@@ -1096,6 +1096,29 @@ gst_omx_video_mixer_event_callback (OMX_HANDLETYPE handle,
       GST_ERROR_OBJECT (mixer, "OMX error event received: %s",
           gst_omx_error_to_str (nevent1));
       break;
+    case OMX_EventMark:
+      GST_INFO_OBJECT (mixer, "OMX mark event received");
+      break;
+    case OMX_EventPortSettingsChanged:
+      GST_INFO_OBJECT (mixer,
+          "OMX port settings changed event received: Port %d: %d", nevent2,
+          nevent1);
+      break;
+    case OMX_EventBufferFlag:
+      GST_INFO_OBJECT (mixer, "OMX buffer flag event received");
+      break;
+    case OMX_EventResourcesAcquired:
+      GST_INFO_OBJECT (mixer, "OMX resources acquired event received");
+      break;
+    case OMX_EventComponentResumed:
+      GST_INFO_OBJECT (mixer, "OMX component resumed event received");
+      break;
+    case OMX_EventDynamicResourcesAvailable:
+      GST_INFO_OBJECT (mixer, "OMX synamic resources available event received");
+      break;
+    case OMX_EventPortFormatDetected:
+      GST_INFO_OBJECT (mixer, "OMX port format detected event received");
+      break;
   }
   return error;
 }
