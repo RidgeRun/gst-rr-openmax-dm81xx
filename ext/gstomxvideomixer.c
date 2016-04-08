@@ -731,6 +731,11 @@ gst_omx_video_mixer_update_src_caps (GstOmxVideoMixer * mixer)
       continue;
     }
 
+    if (omxpad->out_height == 0)
+      omxpad->out_height = omxpad->height;
+    if (omxpad->out_width == 0)
+      omxpad->out_width = omxpad->width;
+
     cur_width = omxpad->out_width + omxpad->out_x;
     cur_height = omxpad->out_height + omxpad->out_y;
 
