@@ -788,9 +788,11 @@ gst_omx_video_mixer_free_outbuf_check (GstOmxVideoMixer * mixer)
 static GstFlowReturn
 gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 {
+  OMX_BUFFERHEADERTYPE *omxpeerbuf = NULL;
   OMX_BUFFERHEADERTYPE *omxbuf;
   OMX_ERRORTYPE error = OMX_ErrorNone;
   GstFlowReturn ret = GST_FLOW_OK;
+  GstCollectData2 *data;
   GstOmxBufferData *bufdata = NULL;
   GstOmxPad *omxpad;
   GstBuffer *buffer;
@@ -819,42 +821,68 @@ gst_omx_video_mixer_collected (GstCollectPads2 * pads, GstOmxVideoMixer * mixer)
 
   GST_DEBUG_OBJECT (mixer, "Entering collected");
   for (l = mixer->collect->data; l; l = l->next) {
-    GstCollectData2 *data;
-
     data = (GstCollectData2 *) l->data;
     buffer = gst_collect_pads2_pop (mixer->collect, data);
 
-    if (buffer) {
-      omxpad = GST_OMX_PAD (data->pad);
+    if (!buffer)
+      continue;
 
-      GST_LOG_OBJECT (omxpad, "Got buffer %p with timestamp %" GST_TIME_FORMAT,
-          buffer, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
+    omxpad = GST_OMX_PAD (data->pad);
 
-      GST_LOG_OBJECT (mixer, "Not an OMX buffer, requesting a free buffer");
+    GST_LOG_OBJECT (omxpad, "Got buffer %p with timestamp %" GST_TIME_FORMAT,
+        buffer, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
+
+    /* If we received an omx buffer look for the corresponding header, 
+       if not copy the data */
+    if (GST_OMX_IS_OMX_BUFFER (buffer)) {
+      gboolean busy;
+
+      if (buffer->parent != NULL) {
+        omxpeerbuf =
+            (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buffer->parent);
+      } else {
+        omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buffer);
+      }
+      GST_LOG_OBJECT (omxpad, "Received an OMX buffer %p->%p", omxpeerbuf,
+          omxpeerbuf->pBuffer);
+
+      error =
+          gst_omx_buf_tab_find_buffer (omxpad->buffers, omxpeerbuf, &omxbuf,
+          &busy);
+      if (GST_OMX_FAIL (error))
+        goto not_found;
+
+      if (busy) {
+        GST_ERROR_OBJECT (omxpad, "Buffer in buffer list is busy");
+      }
+      gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
+      omxbuf->nFilledLen = omxpeerbuf->nFilledLen;
+      omxbuf->nOffset = omxpeerbuf->nOffset;
+    } else {
+      GST_LOG_OBJECT (omxpad, "Not an OMX buffer, requesting a free buffer");
       error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
       if (GST_OMX_FAIL (error))
         goto free_buffer_failed;
       gst_omx_buf_tab_use_buffer (omxpad->buffers, omxbuf);
-      GST_LOG_OBJECT (mixer, "Received buffer %p, copying data", omxbuf);
+      GST_LOG_OBJECT (omxpad, "Received buffer %p, copying data", omxbuf);
       memcpy (omxbuf->pBuffer, GST_BUFFER_DATA (buffer),
           GST_BUFFER_SIZE (buffer));
 
       omxbuf->nFilledLen = GST_BUFFER_SIZE (buffer);
       omxbuf->nOffset = 0;
-      omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buffer);
+    }
+    omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buffer);
 
-      bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
-      bufdata->buffer = buffer;
+    bufdata = (GstOmxBufferData *) omxbuf->pAppPrivate;
+    bufdata->buffer = buffer;
 
-      GST_LOG_OBJECT (mixer, "Emptying buffer %d %p %p->%p", bufdata->id,
-          bufdata, omxbuf, omxbuf->pBuffer);
-      g_mutex_lock (&_omx_mutex);
-      error = mixer->component->EmptyThisBuffer (mixer->handle, omxbuf);
-      g_mutex_unlock (&_omx_mutex);
-      if (GST_OMX_FAIL (error)) {
-        goto empty_error;
-      }
-
+    GST_LOG_OBJECT (omxpad, "Emptying buffer %d %p %p->%p", bufdata->id,
+        bufdata, omxbuf, omxbuf->pBuffer);
+    g_mutex_lock (&_omx_mutex);
+    error = mixer->component->EmptyThisBuffer (mixer->handle, omxbuf);
+    g_mutex_unlock (&_omx_mutex);
+    if (GST_OMX_FAIL (error)) {
+      goto empty_error;
     }
   }
 
@@ -878,6 +906,14 @@ start_failed:
 task_failed:
   {
     GST_ERROR_OBJECT (mixer, "Failed to start output task");
+    return GST_FLOW_ERROR;
+  }
+not_found:
+  {
+    GST_ERROR_OBJECT (mixer,
+        "Buffer is marked as OMX, but was not found on buftab: %s",
+        gst_omx_error_to_str (error));
+    gst_buffer_unref (buffer);
     return GST_FLOW_ERROR;
   }
 free_buffer_failed:
@@ -1738,6 +1774,9 @@ gst_omx_video_mixer_start (GstOmxVideoMixer * mixer)
   OMX_BUFFERHEADERTYPE *peerbuffer;
   GstOmxBufTabNode *node;
   GstOmxPad *omxpad;
+  GSList *l;
+  GstCollectData2 *data;
+  GstBuffer *buffer;
 
   if (mixer->started)
     goto already_started;
@@ -1767,11 +1806,30 @@ gst_omx_video_mixer_start (GstOmxVideoMixer * mixer)
     goto alloc_failed;
 
   GST_INFO_OBJECT (mixer, "Allocating buffers for sink ports");
-  error =
-      gst_omx_video_mixer_for_each_pad (mixer,
-      gst_omx_video_mixer_alloc_buffers, GST_PAD_SINK, NULL);
-  if (GST_OMX_FAIL (error))
-    goto alloc_failed;
+  for (l = mixer->collect->data; l; l = l->next) {
+    OMX_BUFFERHEADERTYPE *omxpeerbuf = NULL;
+    data = (GstCollectData2 *) l->data;
+    omxpad = GST_OMX_PAD (data->pad);
+
+    buffer = gst_collect_pads2_peek (mixer->collect, data);
+    /* If the input buffer is omx, get the peer buffer list and
+     *  use them instead of allocating  new ones */
+    if (GST_OMX_IS_OMX_BUFFER (buffer)) {
+      /* Buffer may be a sub-buffer, if it is get the omx buffer
+       * header from its parent */
+      if (buffer->parent != NULL) {
+        omxpeerbuf =
+            (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buffer->parent);
+      } else {
+        omxpeerbuf = (OMX_BUFFERHEADERTYPE *) GST_BUFFER_MALLOCDATA (buffer);
+      }
+    }
+    gst_omx_video_mixer_alloc_buffers (mixer, omxpad, omxpeerbuf);
+    if (GST_OMX_FAIL (error))
+      goto alloc_failed;
+
+    gst_buffer_unref (buffer);
+  }
 
   GST_INFO_OBJECT (mixer, "Waiting for handle to become Idle");
   error = gst_omx_video_mixer_wait_for_condition (mixer,
