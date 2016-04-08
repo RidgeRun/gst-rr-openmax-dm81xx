@@ -1601,7 +1601,15 @@ gst_omx_video_mixer_alloc_buffers (GstOmxVideoMixer * mixer, GstOmxPad * pad,
 
       GST_DEBUG_OBJECT (pad, "Allocated buffer number %u: %p->%p", i, buffer,
           buffer->pBuffer);
-
+      if (GST_OMX_PAD_PORT (pad)->eDir == OMX_DirOutput) {
+        guint16 *ptr;
+        guint j;
+        ptr = (guint16 *) buffer->pBuffer;
+        for (j = 0; j < size / 2; j++) {
+          *ptr = 0x8000;
+          ptr++;
+        }
+      }
     } else {
       OMX_BUFFERHEADERTYPE *omxpeerbuffer = NULL;
       gpointer pbuffer;
