@@ -732,6 +732,8 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
     if ((this->cont == this->force_idr_period) || (this->force_idr)) {
       OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
 
+      GST_OMX_INIT_STRUCT (&confIntraRefreshVOP, OMX_CONFIG_INTRAREFRESHVOPTYPE);
+
       confIntraRefreshVOP.nPortIndex = 1;
 
       OMX_GetConfig (base->handle,
@@ -748,6 +750,8 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
         this->force_idr = FALSE;
         this->cont++;
       }
+    } else if (this->cont > this->force_idr_period) {
+      this->cont = 0;
     } else {
       this->cont++;
     }
