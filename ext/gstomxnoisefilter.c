@@ -101,13 +101,11 @@ gst_omx_noise_filter_class_init (GstOmxNoiseFilterClass * klass)
       "Melissa Montero <melissa.montero@ridgerun.com>");
 
   template = gst_static_pad_template_get (&src_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   template = gst_static_pad_template_get (&sink_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_noise_filter_set_property;

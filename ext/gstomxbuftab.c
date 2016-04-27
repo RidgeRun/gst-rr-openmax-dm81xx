@@ -227,7 +227,7 @@ gst_omx_buf_tab_remove_buffer (GstOmxBufTab * buftab,
       goto timeout;
 
   buftab->table = g_list_remove (buftab->table, (gpointer) toremove->data);
-  g_free(node);
+  g_free (node);
   g_mutex_unlock (&buftab->tabmutex);
 
   return error;

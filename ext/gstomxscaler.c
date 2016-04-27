@@ -101,13 +101,11 @@ gst_omx_scaler_class_init (GstOmxScalerClass * klass)
       "Michael Gruner <michael.gruner@ridgerun.com>");
 
   template = gst_static_pad_template_get (&src_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   template = gst_static_pad_template_get (&sink_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_scaler_set_property;
@@ -371,7 +369,7 @@ gst_omx_scaler_set_caps (GstPad * pad, GstCaps * caps)
     goto nosetcaps;
 
   gst_caps_unref (newcaps);
-  
+
   return TRUE;
 
 invalidcaps:

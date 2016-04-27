@@ -351,7 +351,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   this->num_buffers = 0;
   this->cont = 0;
 
-  g_mutex_init  (&this->num_buffers_mutex);
+  g_mutex_init (&this->num_buffers_mutex);
   g_cond_init (&this->num_buffers_cond);
 
   error = gst_omx_base_allocate_omx (this, klass->handle_name);
@@ -595,7 +595,8 @@ return before we check if the buffer is interlaced */
     /* FilledLen calculated to achive the sencond field chroma position 
      * to be at 2/3 of the buffer size */
     omxbuf->nFilledLen =
-        (((omxpeerbuf->nFilledLen + omxpeerbuf->nOffset) * 3) >> 2) - omxpeerbuf->nOffset;
+        (((omxpeerbuf->nFilledLen + omxpeerbuf->nOffset) * 3) >> 2) -
+        omxpeerbuf->nOffset;
     omxbuf->nOffset = omxpeerbuf->nOffset;
     omxbuf->nTimeStamp = GST_BUFFER_TIMESTAMP (buf);
     omxbuf->nFlags = OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE |
@@ -698,11 +699,11 @@ gst_omx_base_finalize (GObject * object)
   g_list_free_full (this->pads, gst_object_unref);
   gst_omx_base_free_omx (this);
 
-  g_mutex_clear  (&this->num_buffers_mutex);
+  g_mutex_clear (&this->num_buffers_mutex);
   g_cond_clear (&this->num_buffers_cond);
 
   g_mutex_clear (&this->waitmutex);
-  g_cond_clear(&this->waitcond);
+  g_cond_clear (&this->waitcond);
 
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);

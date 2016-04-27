@@ -107,15 +107,13 @@ gst_omx_buffer_alloc_base_init (gpointer gclass)
       "FIXME:Generic Template Element",
       "Eugenia Guzman <eugenia.guzman@ridgerun.com>");
 
-    template = gst_static_pad_template_get (&src_template);
-    gst_element_class_add_pad_template (element_class,
-					template);
-    gst_object_unref (template);
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (element_class, template);
+  gst_object_unref (template);
 
-    template = gst_static_pad_template_get (&sink_template);
-    gst_element_class_add_pad_template (element_class,
-					template);
-    gst_object_unref (template);
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (element_class, template);
+  gst_object_unref (template);
 }
 
 static void

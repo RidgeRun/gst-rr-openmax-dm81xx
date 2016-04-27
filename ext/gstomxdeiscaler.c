@@ -159,18 +159,15 @@ gst_omx_deiscaler_class_init (GstOmxDeiscalerClass * klass)
       GST_DEBUG_FUNCPTR (gst_omx_deiscaler_release_pad);
 
   template = gst_static_pad_template_get (&sink_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   template = gst_static_pad_template_get (&src0_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   template = gst_static_pad_template_get (&src1_template);
-  gst_element_class_add_pad_template (gstelement_class,
-      template);
+  gst_element_class_add_pad_template (gstelement_class, template);
   gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_deiscaler_set_property;
@@ -403,10 +400,10 @@ gst_omx_deiscaler_request_new_pad (GstElement * element, GstPadTemplate * templ,
     name = gst_pad_get_name (l->data);
     if (strcmp (name, templ->name_template) == 0) {
       srcpad = l->data;
-      g_free(name);
+      g_free (name);
       break;
     }
-    g_free(name);
+    g_free (name);
   }
   if (srcpad == NULL)
     goto nosrcpad;

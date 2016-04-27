@@ -372,8 +372,7 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       break;
     case PROP_BFRAMES:
       this->b_frames = g_value_get_uint (value);
-      GST_INFO_OBJECT (this, "Setting B frames to %d",
-          this->b_frames);
+      GST_INFO_OBJECT (this, "Setting B frames to %d", this->b_frames);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -396,10 +395,10 @@ gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
       return;
     }
 
-    tDynParams.videoDynamicParams.h264EncDynamicParams.
-        videnc2DynamicParams.targetBitRate = this->bitrate;
-    tDynParams.videoDynamicParams.h264EncDynamicParams.
-        videnc2DynamicParams.intraFrameInterval = this->i_period;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        targetBitRate = this->bitrate;
+    tDynParams.videoDynamicParams.h264EncDynamicParams.videnc2DynamicParams.
+        intraFrameInterval = this->i_period;
     error_val =
         OMX_SetConfig (base->handle, OMX_TI_IndexConfigVideoDynamicParams,
         &tDynParams);
@@ -747,7 +746,8 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
     if ((this->cont == this->force_idr_period) || (this->force_idr)) {
       OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
 
-      GST_OMX_INIT_STRUCT (&confIntraRefreshVOP, OMX_CONFIG_INTRAREFRESHVOPTYPE);
+      GST_OMX_INIT_STRUCT (&confIntraRefreshVOP,
+          OMX_CONFIG_INTRAREFRESHVOPTYPE);
 
       confIntraRefreshVOP.nPortIndex = 1;
 
@@ -919,29 +919,29 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
 
     /* for interlace, base profile can not be used */
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        encodingPreset = XDM_USER_DEFINED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_USER_DEFINED;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
         IH264_HIGH_PROFILE;
     tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.level =
         IH264_LEVEL_42;
 
     /* setting Interlace mode */
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        inputContentType = IVIDEO_INTERLACED;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.inputContentType = IVIDEO_INTERLACED;
     tStaticParam.videoStaticParams.h264EncStaticParams.bottomFieldIntra = 0;
     tStaticParam.videoStaticParams.h264EncStaticParams.interlaceCodingType =
         IH264_INTERLACE_FIELDONLY_ARF;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        encodingPreset = XDM_DEFAULT;
-    tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-        rateControlPreset = IVIDEO_STORAGE;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.encodingPreset = XDM_DEFAULT;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        videnc2Params.rateControlPreset = IVIDEO_STORAGE;
 
-    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
-        lumaIntra4x4Enable = 0x1f;
-    tStaticParam.videoStaticParams.h264EncStaticParams.intraCodingParams.
-        lumaIntra8x8Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra4x4Enable = 0x1f;
+    tStaticParam.videoStaticParams.h264EncStaticParams.
+        intraCodingParams.lumaIntra8x8Enable = 0x1f;
 
     g_mutex_lock (&_omx_mutex);
     error =
@@ -951,41 +951,41 @@ gst_omx_h264_enc_static_parameters (GstOmxH264Enc * this,
     if (GST_OMX_FAIL (error))
       goto nointerlaced;
 
-  }
-  else {
-	if (this->b_frames) {
+  } else {
+    if (this->b_frames) {
 
-		OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
+      OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
 
-		GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
+      GST_OMX_INIT_STRUCT (&tStaticParam, OMX_VIDEO_PARAM_STATICPARAMS);
 
-		tStaticParam.nPortIndex = 1;
+      tStaticParam.nPortIndex = 1;
 
-		g_mutex_lock (&_omx_mutex);
-		OMX_GetParameter (base->handle,
-			(OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
-		g_mutex_unlock (&_omx_mutex);
+      g_mutex_lock (&_omx_mutex);
+      OMX_GetParameter (base->handle,
+          (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+      g_mutex_unlock (&_omx_mutex);
 
-		if (OMX_VIDEO_AVCProfileHigh == this->profile)
-			tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
-				IH264_HIGH_PROFILE;
-		else if (OMX_VIDEO_AVCProfileMain == this->profile)
-			tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.profile =
-				IH264_MAIN_PROFILE;
-		else
-			GST_ERROR_OBJECT (this, "Profile needs to be High or Main to add B frames");
+      if (OMX_VIDEO_AVCProfileHigh == this->profile)
+        tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+            profile = IH264_HIGH_PROFILE;
+      else if (OMX_VIDEO_AVCProfileMain == this->profile)
+        tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
+            profile = IH264_MAIN_PROFILE;
+      else
+        GST_ERROR_OBJECT (this,
+            "Profile needs to be High or Main to add B frames");
 
-		tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.
-			rateControlPreset = IVIDEO_STORAGE;
+      tStaticParam.videoStaticParams.h264EncStaticParams.
+          videnc2Params.rateControlPreset = IVIDEO_STORAGE;
 
-		g_mutex_lock (&_omx_mutex);
-		error =
-			OMX_SetParameter (base->handle,
-			(OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
-		g_mutex_unlock (&_omx_mutex);
-		if (GST_OMX_FAIL (error))
-		  goto nointerlaced;
-	}
+      g_mutex_lock (&_omx_mutex);
+      error =
+          OMX_SetParameter (base->handle,
+          (OMX_INDEXTYPE) OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+      g_mutex_unlock (&_omx_mutex);
+      if (GST_OMX_FAIL (error))
+        goto nointerlaced;
+    }
   }
 
   return error;
