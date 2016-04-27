@@ -84,6 +84,7 @@ gst_omx_jpeg_enc_class_init (GstOmxJpegEncClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -95,10 +96,15 @@ gst_omx_jpeg_enc_class_init (GstOmxJpegEncClass * klass)
       "RidgeRun's OMX based JPEG encoder",
       "Diego Solano <diego.solano@ridgerun.com>");
 
+  template = gst_static_pad_template_get (&src_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
+      template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+      template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_jpeg_enc_set_property;
   gobject_class->get_property = gst_omx_jpeg_enc_get_property;
@@ -255,6 +261,8 @@ gst_omx_jpeg_enc_set_caps (GstPad * pad, GstCaps * caps)
 
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
+
+  gst_caps_unref (newcaps);
 
   return TRUE;
 

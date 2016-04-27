@@ -522,6 +522,7 @@ gst_omx_h264_enc_set_caps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
   return TRUE;
 
 invalidcaps:
@@ -765,7 +766,7 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
         this->cont++;
       }
     } else if (this->cont > this->force_idr_period) {
-		this->cont = 0;
+      this->cont = 0;
     } else {
       this->cont++;
     }

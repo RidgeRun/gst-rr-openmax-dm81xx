@@ -433,6 +433,8 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
   if (!gst_pad_set_caps (this->srcpad, newcaps))
     goto nosetcaps;
 
+  gst_caps_unref (newcaps);
+
   return TRUE;
 
 invalidcaps:

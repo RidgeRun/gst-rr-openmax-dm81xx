@@ -88,7 +88,7 @@ gst_omx_noise_filter_class_init (GstOmxNoiseFilterClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
-
+  GstPadTemplate *template;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -100,10 +100,15 @@ gst_omx_noise_filter_class_init (GstOmxNoiseFilterClass * klass)
       "RidgeRun's OMX based noise filter",
       "Melissa Montero <melissa.montero@ridgerun.com>");
 
+  template = gst_static_pad_template_get (&src_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
+      template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+      template);
+  gst_object_unref (template);
 
   gobject_class->set_property = gst_omx_noise_filter_set_property;
   gobject_class->get_property = gst_omx_noise_filter_get_property;
@@ -289,6 +294,7 @@ gst_omx_noise_filter_set_caps (GstPad * pad, GstCaps * caps)
     goto nosetcaps;
 
   gst_caps_unref (allowedcaps);
+  gst_caps_unref (newcaps);
 
   return TRUE;
 
