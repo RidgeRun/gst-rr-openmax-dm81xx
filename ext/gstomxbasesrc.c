@@ -181,6 +181,7 @@ gst_omx_base_src_init (GstOmxBaseSrc * this, gpointer g_class)
   g_cond_init (&this->waitcond);
   this->pending_buffers = gst_omx_buf_queue_new ();
 
+  gst_omx_init ();
   error = gst_omx_base_src_allocate_omx (this, klass->handle_name);
 
   if (GST_OMX_FAIL (error)) {
@@ -251,11 +252,15 @@ static void
 gst_omx_base_src_finalize (GObject * object)
 {
   GstOmxBaseSrc *this = GST_OMX_BASE_SRC (object);
+  OMX_ERRORTYPE error;
 
   GST_INFO_OBJECT (this, "Finalizing %s", GST_OBJECT_NAME (this));
 
   g_list_free_full (this->pads, gst_object_unref);
-  gst_omx_base_src_free_omx (this);
+
+  error = gst_omx_base_src_free_omx (this);
+  if (!GST_OMX_FAIL (error))
+    gst_omx_deinit ();
 
   /* Chain up to the parent class */
   G_OBJECT_CLASS (parent_class)->finalize (object);

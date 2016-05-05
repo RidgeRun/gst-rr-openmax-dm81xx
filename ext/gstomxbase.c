@@ -354,6 +354,7 @@ gst_omx_base_init (GstOmxBase * this, gpointer g_class)
   g_mutex_init (&this->num_buffers_mutex);
   g_cond_init (&this->num_buffers_cond);
 
+  gst_omx_init ();
   error = gst_omx_base_allocate_omx (this, klass->handle_name);
   if (GST_OMX_FAIL (error)) {
     GST_ELEMENT_ERROR (this, LIBRARY,
@@ -693,11 +694,14 @@ static void
 gst_omx_base_finalize (GObject * object)
 {
   GstOmxBase *this = GST_OMX_BASE (object);
+  OMX_ERRORTYPE error;
 
   GST_INFO_OBJECT (this, "Finalizing %s", GST_OBJECT_NAME (this));
 
   g_list_free_full (this->pads, gst_object_unref);
-  gst_omx_base_free_omx (this);
+  error = gst_omx_base_free_omx (this);
+  if (!GST_OMX_FAIL (error))
+    gst_omx_deinit ();
 
   g_mutex_clear (&this->num_buffers_mutex);
   g_cond_clear (&this->num_buffers_cond);

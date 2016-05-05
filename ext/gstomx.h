@@ -93,5 +93,7 @@ struct _GstOmxBufferData
 
 GMutex _omx_mutex;
 
+void gst_omx_init ();
+void gst_omx_deinit ();
 G_END_DECLS
 #endif // __GST_OMX_H__

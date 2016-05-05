@@ -41,6 +41,54 @@
 #include "gstomxnoisefilter.h"
 #include "gstomxbufferalloc.h"
 
+static guint _omx_ref = 0;
+
+/**
+ * gst_omx_init:
+ *
+ * Increases the omx reference, it should be call
+ * before any OMX usage to ensure the OMX core is
+ * initialized. Call it only once per element,
+ * it is recomended to use it at the element init.
+ */
+void
+gst_omx_init ()
+{
+  g_mutex_lock (&_omx_mutex);
+  /* Initialize the OMX core if
+   * no omx reference exists */
+  if (_omx_ref == 0) {
+    OMX_Init ();
+  }
+  _omx_ref++;
+  g_mutex_unlock (&_omx_mutex);
+}
+
+/**
+ * gst_omx_deinit:
+ *
+ * Decreases the omx reference, it should be the last
+ * OMX call to deinitialize the OMX core. Call it only
+ * once per element, it is recomended to use it at
+ * the element  dispose.
+ */
+void
+gst_omx_deinit ()
+{
+  /* If already deinit just return */
+  if (!_omx_ref)
+    return;
+
+  g_mutex_lock (&_omx_mutex);
+  _omx_ref--;
+  /* Deinitialize the OMX core if
+   * every omx reference was returned */
+  if (_omx_ref == 0) {
+    OMX_Deinit ();
+  }
+  g_mutex_unlock (&_omx_mutex);
+}
+
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
  * register the element factories and other features
@@ -51,8 +99,6 @@ omx_init (GstPlugin * omx)
   /* initialize gst controller library */
   gst_controller_init (NULL, NULL);
 
-  /* Initialize OMX subsystem */
-  OMX_Init ();
   g_mutex_init (&_omx_mutex);
 
 #if 0
