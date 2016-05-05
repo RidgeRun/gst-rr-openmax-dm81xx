@@ -414,16 +414,16 @@ gst_rrparser_generate_codec_data (GstRRParser * rrparser, GstBuffer * buffer)
     GST_DEBUG ("SPS: profile=%d, compatibly=%d, level=%d",
         profile, compatibly, level);
   } else {
-    GST_WARNING ("No SPS found");
-
-    profile = 1;                // Default Profile: Baseline
-    compatibly = 0;
-    level = 8192;               // Default Level: 4.2
+    GST_WARNING ("No SPS found, waiting for IDR");
+    return NULL;
   }
   pps = gst_rrparser_fetch_nal (buffer, 8);     // 8 = PPS
   if (pps) {
     num_pps = 1;
     avcc_len += GST_BUFFER_SIZE (pps) + 2;
+  } else {
+    GST_WARNING ("No PPS found, waiting for IDR");
+    return NULL;
   }
 
   /* Since we already know the position of the SPS and PPS we save these values */
@@ -471,6 +471,8 @@ gst_rrparser_set_codec_data (GstRRParser * rrparser, GstBuffer * buf)
 
   /* Generate the codec data with the SPS and the PPS */
   codec_data = gst_rrparser_generate_codec_data (rrparser, buf);
+  if (!codec_data)
+    return FALSE;
 
   /* Update the caps with the codec data */
   src_caps =
@@ -587,7 +589,9 @@ gst_rrparser_chain (GstPad * pad, GstBuffer * buf)
   /* Obtain and set codec data */
   if (!rrparser->set_codec_data) {
     if (!gst_rrparser_set_codec_data (rrparser, buf)) {
-      GST_WARNING ("Problems for generate codec data");
+      GST_WARNING ("Failed to generate codec data, dropping buffer");
+      gst_buffer_unref (buf);
+      return GST_FLOW_OK;
     }
     rrparser->set_codec_data = TRUE;
   }
