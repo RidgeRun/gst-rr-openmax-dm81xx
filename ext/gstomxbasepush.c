@@ -63,13 +63,15 @@ static GstStateChangeReturn gst_omx_base_push_change_state (GstElement *
     element, GstStateChange transition);
 static GstFlowReturn gst_omx_base_push_fill_buffer (GstOmxBase * base,
     OMX_BUFFERHEADERTYPE * outbuf);
-
+static gboolean gst_omx_base_push_event (GstOmxBase * base, GstPad * pad,
+    GstEvent * event);
 static OMX_ERRORTYPE gst_omx_base_push_create_task (GstOmxBasePush * this);
 static OMX_ERRORTYPE gst_omx_base_push_pause_task (GstOmxBasePush * this);
 static OMX_ERRORTYPE gst_omx_base_push_start_task (GstOmxBasePush * this);
 static OMX_ERRORTYPE gst_omx_base_push_stop_task (GstOmxBasePush * this);
 static OMX_ERRORTYPE gst_omx_base_push_destroy_task (GstOmxBasePush * this);
-static OMX_ERRORTYPE gst_omx_base_push_clear_queue (GstOmxBasePush * this);
+static OMX_ERRORTYPE gst_omx_base_push_clear_queue (GstOmxBasePush * this,
+    gboolean fill);
 
 /* GObject vmethod implementations */
 
@@ -95,6 +97,7 @@ gst_omx_base_push_class_init (GstOmxBasePushClass * klass)
       GST_DEBUG_FUNCPTR (gst_omx_base_push_change_state);
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_base_push_fill_buffer);
+  gstomxbase_class->event = GST_DEBUG_FUNCPTR (gst_omx_base_push_event);
 
   GST_DEBUG_CATEGORY_INIT (gst_omx_base_push_debug, "omx_base_push",
       0, "RidgeRun's OMX base push tasks");
@@ -189,6 +192,56 @@ push_fail:
     return GST_FLOW_ERROR;
   }
 }
+
+
+static gboolean
+gst_omx_base_push_event (GstOmxBase * base, GstPad * pad, GstEvent * event)
+{
+  GstOmxBasePush *this;
+  gboolean ret = FALSE;
+
+  this = GST_OMX_BASE_PUSH (base);
+
+  switch (GST_EVENT_TYPE (event)) {
+      /* We only care for the EOS event, put the component in flush state so it doesn't 
+       * try to process any more buffers. */
+    case GST_EVENT_EOS:
+    {
+      gst_omx_base_push_stop_task (this);
+      gst_omx_base_push_clear_queue (this, TRUE);
+      break;
+    }
+    case GST_EVENT_FLUSH_START:
+    {
+      gst_omx_base_push_pause_task (this);
+      gst_omx_buf_queue_release (this->queue_buffers, TRUE);
+      break;
+    }
+    case GST_EVENT_FLUSH_STOP:
+    {
+      ret = GST_OMX_BASE_CLASS (parent_class)->event (base, pad, event);
+
+      if (gst_task_get_state (this->pushtask) != GST_TASK_STARTED) {
+        GST_INFO_OBJECT (this, "Clearing buffers in queue");
+        gst_omx_base_push_clear_queue (this, TRUE);
+
+        GST_INFO_OBJECT (this, "Startig push task");
+        gst_omx_base_push_start_task (this);
+      }
+
+      goto done;
+      break;
+    }
+    default:
+      break;
+  }
+
+  ret = GST_OMX_BASE_CLASS (parent_class)->event (base, pad, event);
+
+done:
+  return ret;
+}
+
 
 void
 gst_omx_base_push_task (void *data)
@@ -313,7 +366,7 @@ gst_omx_base_push_stop_task (GstOmxBasePush * this)
 
   gst_omx_buf_queue_release (this->queue_buffers, TRUE);
 
-  gst_omx_base_push_clear_queue (this);
+  gst_omx_base_push_clear_queue (this, FALSE);
 
   if (!gst_task_join (this->pushtask))
     GST_WARNING_OBJECT (this, "Failed stop task ");
@@ -324,13 +377,15 @@ gst_omx_base_push_stop_task (GstOmxBasePush * this)
 }
 
 static OMX_ERRORTYPE
-gst_omx_base_push_clear_queue (GstOmxBasePush * this)
+gst_omx_base_push_clear_queue (GstOmxBasePush * this, gboolean fill)
 {
-
   OMX_BUFFERHEADERTYPE *omx_buf = NULL;
   OMX_ERRORTYPE error = OMX_ErrorNone;
+  GstOmxBase *base;
   GstOmxBufferData *bufdata = NULL;
   GstOmxPad *pad = NULL;
+
+  base = GST_OMX_BASE (this);
 
   omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
   while (omx_buf) {
@@ -338,9 +393,13 @@ gst_omx_base_push_clear_queue (GstOmxBasePush * this)
     pad = bufdata->pad;
     GST_DEBUG_OBJECT (this, "Dropping buffer %d %p %p->%p", bufdata->id,
         bufdata, omx_buf, omx_buf->pBuffer);
+
     g_mutex_lock (&_omx_mutex);
     error = gst_omx_buf_tab_return_buffer (pad->buffers, omx_buf);
+    if (fill)
+      error = base->component->FillThisBuffer (base->handle, omx_buf);
     g_mutex_unlock (&_omx_mutex);
+
     omx_buf = gst_omx_buf_queue_pop_buffer_no_wait (this->queue_buffers);
   }
   GST_DEBUG_OBJECT (this, " Pushed queue empty");
