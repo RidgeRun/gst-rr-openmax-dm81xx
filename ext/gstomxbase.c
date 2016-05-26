@@ -144,8 +144,10 @@ static OMX_ERRORTYPE
 gst_omx_base_set_flushing_pad (GstOmxBase * this, GstOmxPad * pad,
     gpointer data);
 
-/* GObject vmethod implementations */
+static gboolean gst_omx_base_default_event (GstOmxBase * this, GstPad * pad,
+    GstEvent * event);
 
+/* GObject vmethod implementations */
 static void
 gst_omx_base_base_init (gpointer g_class)
 {
@@ -162,6 +164,7 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
 
   parent_class = g_type_class_peek_parent (klass);
 
+
   klass->omx_event = NULL;
   klass->omx_fill_buffer = NULL;
   klass->omx_empty_buffer = NULL;
@@ -170,6 +173,8 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
   klass->init_ports = NULL;
 
   klass->handle_name = NULL;
+
+  klass->event = GST_DEBUG_FUNCPTR (gst_omx_base_default_event);
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -207,6 +212,7 @@ gst_omx_base_class_init (GstOmxBaseClass * klass)
       g_param_spec_int ("num-buffers", "Number of buffers",
           "The number of Buffers to be processed (0 : process all buffers)",
           0, G_MAXINT, GST_OMX_BASE_NUM_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+
 }
 
 static OMX_ERRORTYPE
@@ -512,7 +518,8 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
 
     GST_LOG_OBJECT (this, "Not an OMX buffer, requesting a free buffer");
     if (GST_STATE_PAUSED <= GST_STATE (this)) {
-      error = gst_omx_buf_tab_get_free_buffer_preroll (omxpad->buffers, &omxbuf);
+      error =
+          gst_omx_buf_tab_get_free_buffer_preroll (omxpad->buffers, &omxbuf);
     } else {
       error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
     }
@@ -1899,16 +1906,9 @@ nofill:
 }
 
 static gboolean
-gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
+gst_omx_base_default_event (GstOmxBase * this, GstPad * pad, GstEvent * event)
 {
-
-  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
   OMX_ERRORTYPE error = OMX_ErrorNone;
-
-  if (G_UNLIKELY (this == NULL)) {
-    gst_event_unref (event);
-    return FALSE;
-  }
 
   GST_DEBUG_OBJECT (this, "handling event %p %" GST_PTR_FORMAT " type: %s  ",
       event, event, GST_EVENT_TYPE_NAME (event));
@@ -1922,7 +1922,6 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
        * desired amount of frames using the num_buffers property we
        *  can be sure that we will encode this amount of frames (i.e.snapshots)
        */
-
       if (this->num_buffers) {
         g_mutex_lock (this->num_buffers_mutex);
         g_cond_wait (this->num_buffers_cond, this->num_buffers_mutex);
@@ -1985,4 +1984,32 @@ noflush_eos:
   GST_ERROR_OBJECT (this, "Unable to flush component after EOS: %s ",
       gst_omx_error_to_str (error));
   return FALSE;
+}
+
+static gboolean
+gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
+{
+  GstOmxBase *this = GST_OMX_BASE (GST_OBJECT_PARENT (pad));
+  GstOmxBaseClass *bclass;
+  gboolean ret = FALSE;
+
+  if (G_UNLIKELY (this == NULL)) {
+    gst_event_unref (event);
+    return FALSE;
+  }
+
+  bclass = GST_OMX_BASE_GET_CLASS (this);
+  if (bclass->event) {
+    if (!(ret = bclass->event (this, pad, event)))
+      goto subclass_failed;
+  }
+
+  return ret;
+
+  /* ERRORS */
+subclass_failed:
+  {
+    GST_DEBUG_OBJECT (this, "subclass refused event");
+    return ret;
+  }
 }

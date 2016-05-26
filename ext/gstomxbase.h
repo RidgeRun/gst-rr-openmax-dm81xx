@@ -93,13 +93,15 @@ struct _GstOmxBaseClass
 
   gchar *handle_name;
 
-    OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
-      guint32, gpointer);
-    GstFlowReturn (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-    GstFlowReturn (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
-    OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
-    gboolean (*parse_caps) (GstPad *, GstCaps *);
+  OMX_ERRORTYPE (*omx_event) (GstOmxBase *, OMX_EVENTTYPE, guint32,
+			      guint32, gpointer);
+  GstFlowReturn (*omx_fill_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+  GstFlowReturn (*omx_empty_buffer) (GstOmxBase *, OMX_BUFFERHEADERTYPE *);
+  OMX_ERRORTYPE (*init_ports) (GstOmxBase *);
+  gboolean (*parse_caps) (GstPad *, GstCaps *);
   GstCaps *(*parse_buffer) (GstOmxBase *, GstBuffer *);
+  /* notify subclass of an event */
+  gboolean (*event) (GstOmxBase *, GstPad *, GstEvent *);
 
 };
 
