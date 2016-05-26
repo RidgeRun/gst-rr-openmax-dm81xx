@@ -33,6 +33,7 @@ gst_omx_buf_queue_new ()
   g_cond_init (&bufqueue->queuecond);
   bufqueue->queue = g_queue_new ();
   g_queue_init (bufqueue->queue);
+  bufqueue->release = FALSE;
 
 exit:
   return bufqueue;
@@ -47,6 +48,9 @@ gst_omx_buf_queue_push_buffer (GstOmxBufQueue * bufqueue,
 
   g_return_val_if_fail (bufqueue, OMX_ErrorBadParameter);
   g_return_val_if_fail (buffer, OMX_ErrorBadParameter);
+
+  if (bufqueue->release)
+    return OMX_ErrorBadParameter;
 
   error = OMX_ErrorNone;
 
@@ -105,6 +109,56 @@ gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue * bufqueue)
   g_mutex_unlock (&bufqueue->queuemutex);
 
   return buffer;
+}
+
+
+
+OMX_BUFFERHEADERTYPE *
+gst_omx_buf_queue_pop_buffer_check_release (GstOmxBufQueue * bufqueue)
+{
+  OMX_BUFFERHEADERTYPE *buffer = NULL;
+  guint64 endtime;
+  endtime = g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND;
+
+  g_mutex_lock (&bufqueue->queuemutex);
+retry:
+
+  while (g_queue_is_empty (bufqueue->queue) && !bufqueue->release) {
+    if (!g_cond_wait_until (&bufqueue->queuecond, &bufqueue->queuemutex,
+            endtime))
+      goto timeout;
+    else
+      goto retry;
+  }
+
+  buffer = (OMX_BUFFERHEADERTYPE *) g_queue_pop_head (bufqueue->queue);
+
+  g_mutex_unlock (&bufqueue->queuemutex);
+
+  return buffer;
+
+timeout:
+  g_mutex_unlock (&bufqueue->queuemutex);
+  return buffer;
+
+}
+
+
+OMX_ERRORTYPE
+gst_omx_buf_queue_release (GstOmxBufQueue * bufqueue, gboolean release)
+{
+  OMX_ERRORTYPE error;
+
+  g_return_val_if_fail (bufqueue, OMX_ErrorBadParameter);
+
+  error = OMX_ErrorNone;
+  g_mutex_lock (&bufqueue->queuemutex);
+  bufqueue->release = release;
+  g_cond_signal (&bufqueue->queuecond);
+  g_mutex_unlock (&bufqueue->queuemutex);
+
+  return error;
+
 }
 
 OMX_ERRORTYPE
