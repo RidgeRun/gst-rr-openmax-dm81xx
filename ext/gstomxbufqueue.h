@@ -39,6 +39,7 @@ struct _GstOmxBufQueue
 };
 
 GstOmxBufQueue *gst_omx_buf_queue_new ();
+OMX_ERRORTYPE gst_omx_buf_queue_free (GstOmxBufQueue * bufqueue);
 OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer (GstOmxBufQueue *);
 OMX_BUFFERHEADERTYPE *gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue *);
 OMX_ERRORTYPE gst_omx_buf_queue_push_buffer (GstOmxBufQueue *,

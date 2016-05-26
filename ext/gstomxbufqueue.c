@@ -106,3 +106,22 @@ gst_omx_buf_queue_pop_buffer_no_wait (GstOmxBufQueue * bufqueue)
 
   return buffer;
 }
+
+OMX_ERRORTYPE
+gst_omx_buf_queue_free (GstOmxBufQueue * bufqueue)
+{
+  OMX_ERRORTYPE error;
+
+  g_return_val_if_fail (bufqueue, OMX_ErrorBadParameter);
+
+  error = OMX_ErrorNone;
+  g_mutex_lock (&bufqueue->queuemutex);
+  g_queue_free (bufqueue->queue);
+  g_mutex_unlock (&bufqueue->queuemutex);
+  g_mutex_clear (&bufqueue->queuemutex);
+  g_cond_clear (&bufqueue->queuecond);
+
+  g_free (bufqueue);
+exit:
+  return error;
+}
