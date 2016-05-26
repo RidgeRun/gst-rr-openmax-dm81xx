@@ -25,7 +25,7 @@
 
 #include <gst/gst.h>
 #include "gstomxpad.h"
-#include "gstomxbase.h"
+#include "gstomxbasepush.h"
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_H264_DEC \
@@ -43,7 +43,7 @@ typedef struct _GstOmxH264DecClass GstOmxH264DecClass;
 
 struct _GstOmxH264Dec
 {
-  GstOmxBase element;
+  GstOmxBasePush element;
 
   GstPad *srcpad, *sinkpad;
   GstOmxFormat format;
@@ -51,7 +51,7 @@ struct _GstOmxH264Dec
 
 struct _GstOmxH264DecClass
 {
-  GstOmxBaseClass parent_class;
+  GstOmxBasePushClass parent_class;
 };
 
 GType gst_omx_h264_dec_get_type (void);

@@ -67,11 +67,11 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     );
 
 #define gst_omx_h264_dec_parent_class parent_class
-G_DEFINE_TYPE (GstOmxH264Dec, gst_omx_h264_dec, GST_TYPE_OMX_BASE);
+G_DEFINE_TYPE (GstOmxH264Dec, gst_omx_h264_dec, GST_TYPE_OMX_BASE_PUSH);
 
 static gboolean gst_omx_h264_dec_set_caps (GstPad * pad, GstCaps * caps);
 static OMX_ERRORTYPE gst_omx_h264_dec_init_pads (GstOmxBase * this);
-static GstFlowReturn gst_omx_h264_dec_fill_callback (GstOmxBase *,
+static GstFlowReturn gst_omx_h264_dec_fill_callback (GstOmxBasePush * base,
     OMX_BUFFERHEADERTYPE *);
 /* GObject vmethod implementations */
 
@@ -81,9 +81,11 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
 {
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstOmxBasePushClass *gstomxbasepush_class;
 
   gstelement_class = (GstElementClass *) klass;
   gstomxbase_class = GST_OMX_BASE_CLASS (klass);
+  gstomxbasepush_class = GST_OMX_BASE_PUSH_CLASS (klass);
 
   gst_element_class_set_details_simple (gstelement_class,
       "OpenMAX H.264 video decoder",
@@ -97,9 +99,10 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
       gst_static_pad_template_get (&sink_template));
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
-  gstomxbase_class->omx_fill_buffer =
-      GST_DEBUG_FUNCPTR (gst_omx_h264_dec_fill_callback);
   gstomxbase_class->init_ports = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_init_pads);
+
+  gstomxbasepush_class->push_buffer =
+      GST_DEBUG_FUNCPTR (gst_omx_h264_dec_fill_callback);
 
   gstomxbase_class->handle_name = "OMX.TI.DUCATI.VIDDEC";
 
@@ -306,7 +309,7 @@ noport:
 }
 
 static GstFlowReturn
-gst_omx_h264_dec_fill_callback (GstOmxBase * base,
+gst_omx_h264_dec_fill_callback (GstOmxBasePush * base,
     OMX_BUFFERHEADERTYPE * outbuf)
 {
   GstOmxH264Dec *this = GST_OMX_H264_DEC (base);
