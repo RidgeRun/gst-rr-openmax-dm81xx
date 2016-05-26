@@ -244,8 +244,8 @@ timeout:
 }
 
 OMX_ERRORTYPE
-gst_omx_buf_tab_get_free_buffer (GstOmxBufTab * buftab,
-    OMX_BUFFERHEADERTYPE ** buffer)
+gst_omx_buf_tab_get_free_buffer_full (GstOmxBufTab * buftab,
+				 OMX_BUFFERHEADERTYPE ** buffer, guint64 timeout)
 {
   OMX_ERRORTYPE error;
   GList *table;
@@ -256,32 +256,35 @@ gst_omx_buf_tab_get_free_buffer (GstOmxBufTab * buftab,
 
   error = OMX_ErrorNone;
   table = buftab->table;
-  endtime = g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND;
+  endtime = g_get_monotonic_time () + timeout * G_TIME_SPAN_SECOND;
 
   *buffer = NULL;
 
   g_mutex_lock (&buftab->tabmutex);
 
-retry:
-  table = buftab->table;
+  while (!*buffer) {
+    table = buftab->table;
 
-  while (table) {
-    node = (GstOmxBufTabNode *) table->data;
-    if (!node->busy) {
-      *buffer = node->buffer;
-      break;
+    while (table) {
+      node = (GstOmxBufTabNode *) table->data;
+      if (!node->busy) {
+	*buffer = node->buffer;
+	break;
+      }
+
+      table = g_list_next (table);
     }
 
-    table = g_list_next (table);
-  }
+    if (*buffer)
+      break;
 
-  while (!*buffer) {
-    if (!g_cond_wait_until (&buftab->tabcond, &buftab->tabmutex, endtime))
-      goto timeout;
-    else
-      goto retry;
+    if (timeout > 0 ) {
+      if (!g_cond_wait_until (&buftab->tabcond, &buftab->tabmutex, endtime))
+	goto timeout;
+    } else {
+      g_cond_wait (&buftab->tabcond, &buftab->tabmutex);
+    }
   }
-
   g_mutex_unlock (&buftab->tabmutex);
   return error;
 
@@ -290,6 +293,20 @@ timeout:
   error = OMX_ErrorTimeout;
   return error;
 
+}
+
+OMX_ERRORTYPE
+gst_omx_buf_tab_get_free_buffer (GstOmxBufTab * buftab,
+				 OMX_BUFFERHEADERTYPE ** buffer)
+{
+  return gst_omx_buf_tab_get_free_buffer_full(buftab, buffer, 5);
+}
+
+OMX_ERRORTYPE
+gst_omx_buf_tab_get_free_buffer_preroll (GstOmxBufTab * buftab,
+				 OMX_BUFFERHEADERTYPE ** buffer)
+{
+  return gst_omx_buf_tab_get_free_buffer_full(buftab, buffer, 0);
 }
 
 OMX_ERRORTYPE

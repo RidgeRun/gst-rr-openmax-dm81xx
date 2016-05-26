@@ -51,6 +51,8 @@ OMX_ERRORTYPE gst_omx_buf_tab_add_buffer (GstOmxBufTab *,
     OMX_BUFFERHEADERTYPE *);
 OMX_ERRORTYPE gst_omx_buf_tab_get_free_buffer (GstOmxBufTab *,
     OMX_BUFFERHEADERTYPE **);
+OMX_ERRORTYPE gst_omx_buf_tab_get_free_buffer_preroll (GstOmxBufTab *,
+    OMX_BUFFERHEADERTYPE **);
 OMX_ERRORTYPE gst_omx_buf_tab_find_buffer (GstOmxBufTab *,
     OMX_BUFFERHEADERTYPE *, OMX_BUFFERHEADERTYPE **, gboolean * busy);
 OMX_ERRORTYPE gst_omx_buf_tab_use_buffer (GstOmxBufTab *,

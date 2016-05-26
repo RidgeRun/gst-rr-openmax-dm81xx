@@ -511,7 +511,11 @@ gst_omx_base_chain (GstPad * pad, GstBuffer * buf)
   } else {
 
     GST_LOG_OBJECT (this, "Not an OMX buffer, requesting a free buffer");
-    error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
+    if (GST_STATE_PAUSED <= GST_STATE (this)) {
+      error = gst_omx_buf_tab_get_free_buffer_preroll (omxpad->buffers, &omxbuf);
+    } else {
+      error = gst_omx_buf_tab_get_free_buffer (omxpad->buffers, &omxbuf);
+    }
     if (GST_OMX_FAIL (error))
       goto nofreebuffer;
 
