@@ -5,6 +5,7 @@ libgstrromx_la_SOURCES = \
 	gstomx.c gstomx.h \
 	gstomxpad.c gstomxpad.h \
 	gstomxbase.c gstomxbase.h \
+	gstomxbasepush.c gstomxbasepush.h \
 	gstomxerror.c gstomxerror.h \
 	gstomxbufferalloc.c gstomxbufferalloc.h \
 	gstomxmpeg2dec.c gstomxmpeg2dec.h \
