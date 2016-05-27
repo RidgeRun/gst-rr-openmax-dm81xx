@@ -81,6 +81,7 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
 {
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gstelement_class = (GstElementClass *) klass;
   gstomxbase_class = GST_OMX_BASE_CLASS (klass);
@@ -91,10 +92,13 @@ gst_omx_h264_dec_class_init (GstOmxH264DecClass * klass)
       "RidgeRun's OMX based H264 decoder",
       "Carlos Gomez <carlos.gomez@ridgerun.com>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_caps);
   gstomxbase_class->omx_fill_buffer =

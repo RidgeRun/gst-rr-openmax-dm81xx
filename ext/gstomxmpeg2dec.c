@@ -83,6 +83,7 @@ gst_omx_mpeg2_dec_class_init (GstOmxMpeg2DecClass * klass)
 {
   GstElementClass *gstelement_class;
   GstOmxBaseClass *gstomxbase_class;
+  GstPadTemplate *template;
 
   gstelement_class = (GstElementClass *) klass;
   gstomxbase_class = GST_OMX_BASE_CLASS (klass);
@@ -93,10 +94,13 @@ gst_omx_mpeg2_dec_class_init (GstOmxMpeg2DecClass * klass)
       "RidgeRun's OMX based MPEG2 decoder",
       "Michael Gruner <michael.gruner@ridgerun.com>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
+  template = gst_static_pad_template_get (&src_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
+
+  template = gst_static_pad_template_get (&sink_template);
+  gst_element_class_add_pad_template (gstelement_class, template);
+  gst_object_unref (template);
 
   gstomxbase_class->parse_buffer = GST_DEBUG_FUNCPTR (gst_omx_mpeg2_dec_parse);
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_mpeg2_dec_set_caps);
