@@ -49,6 +49,7 @@ struct _GstOmxAACDec
   gboolean always_copy;
   gint mpegversion;
   gint aacversion;
+  gint stream_format;
 
   /* Properties */
   gboolean framemode;

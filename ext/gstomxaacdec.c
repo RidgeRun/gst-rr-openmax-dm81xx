@@ -215,6 +215,7 @@ gst_omx_aac_dec_set_caps (GstPad * pad, GstCaps * caps)
   GstStructure *srcstructure = NULL;
   GstCaps *allowedcaps = NULL;
   GstCaps *newcaps = NULL;
+  gchar *stream_format = NULL;
 
   g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
 
@@ -241,15 +242,33 @@ gst_omx_aac_dec_set_caps (GstPad * pad, GstCaps * caps)
     goto invalidcaps;
   }
 
+  GST_DEBUG_OBJECT (this, "Reading stream format");
+  stream_format = gst_structure_get_string (structure, "stream-format");
+
+  if (!stream_format) {
+    GST_INFO_OBJECT (this, "Stream format not found asumming ADTS/ADIF");
+    this->stream_format = 0;
+  } else {
+    if (!strcmp ("raw", stream_format)) {
+      this->stream_format = 1;
+    } else {
+      this->stream_format = 0;
+    }
+  }
+
+
   this->framed = gst_structure_has_field (structure, "framed");
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tRate:  %u\n"
       "\tChannels %u\n"
       "\tobject_type:  %u\n"
-      "\tMpegversion:  %u\n",
+      "\tMpegversion:  %u\n"
+      "\tstream-format:  %u\n"
+      "\tframed:  %u\n",
       this->format.rate,
-      this->format.channels, this->aacversion, this->mpegversion);
+      this->format.channels, this->aacversion,
+      this->mpegversion, this->stream_format, this->framed);
 
   /* Ask for the output caps, if not fixed then try the biggest frame */
   allowedcaps = gst_pad_get_allowed_caps (this->srcpad);
@@ -463,12 +482,12 @@ gst_omx_aac_dec_parameters (GstOmxAACDec * this, GstOmxFormat * format)
       break;
   }
 
-  if (this->framed) {
+  if (this->stream_format) {
     aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatRAW;
     GST_DEBUG_OBJECT (this, "Format: Raw");
   } else {
-    aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMax;
-    GST_DEBUG_OBJECT (this, "Format: Max");
+    aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMP2ADTS;
+    GST_DEBUG_OBJECT (this, "Format: ADTS/ADIF");
   }
 
   g_mutex_lock (&_omx_mutex);
