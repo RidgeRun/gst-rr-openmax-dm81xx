@@ -567,8 +567,9 @@ gst_omx_aac_dec_fill_callback (GstOmxBase * base, OMX_BUFFERHEADERTYPE * outbuf)
     buffer = gst_buffer_new_and_alloc (outbuf->nFilledLen);
     if (!buffer)
       goto noalloc;
-    gst_buffer_set_caps (buffer, caps);
     memcpy (buffer->data, outbuf->pBuffer, outbuf->nFilledLen);
+    GST_BUFFER_FREE_FUNC (buffer) = g_free;
+    GST_BUFFER_CAPS (buffer) = caps;
     GST_BUFFER_TIMESTAMP (buffer) = outbuf->nTimeStamp;
     GST_BUFFER_DURATION (buffer) = 1e9 * 1 / this->format.rate;
     GST_BUFFER_FLAG_SET (buffer, GST_OMX_BUFFER_FLAG);
