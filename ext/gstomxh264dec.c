@@ -374,13 +374,13 @@ noalloc:
   {
     GST_ELEMENT_ERROR (GST_ELEMENT (this), CORE, PAD,
         ("Unable to allocate buffer to push"), (NULL));
-    gst_omx_basedecoder_release_buffer ((gpointer) outbuf);
+    gst_omx_base_release_buffer ((gpointer) outbuf);
     return GST_FLOW_ERROR;
   }
 nocaps:
   {
     GST_ERROR_OBJECT (this, "Unable to provide the requested caps");
-    gst_omx_basedecoder_release_buffer ((gpointer) outbuf);
+    gst_omx_base_release_buffer ((gpointer) outbuf);
     return GST_FLOW_NOT_NEGOTIATED;
   }
 nopush:
