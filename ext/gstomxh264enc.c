@@ -749,7 +749,7 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
    */
   GST_DEBUG_OBJECT (this, "Setting encoder IDRPeriod");
   if ((this->force_idr_period > 0) || (this->force_idr)) {
-    if ((this->cont == this->force_idr_period) || (this->force_idr)) {
+    if ((this->cont == this->force_idr_period-1) || (this->force_idr)) {
       OMX_CONFIG_INTRAREFRESHVOPTYPE confIntraRefreshVOP;
 
       GST_OMX_INIT_STRUCT (&confIntraRefreshVOP,
@@ -764,7 +764,7 @@ gst_omx_h264_enc_fill_callback (GstOmxBase * base,
       OMX_SetConfig (base->handle,
           OMX_IndexConfigVideoIntraVOPRefresh, &confIntraRefreshVOP);
 
-      if (this->cont == this->force_idr_period)
+      if (this->cont == this->force_idr_period-1)
         this->cont = 0;
 
       if (this->force_idr) {
