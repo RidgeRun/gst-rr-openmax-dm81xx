@@ -588,7 +588,7 @@ return before we check if the buffer is interlaced */
 
 flushing:
   {
-    GST_ERROR_OBJECT (this, "Discarding buffer %d while flushing", bufdata->id);
+    GST_ERROR_OBJECT (this, "Discarding buffer %p while flushing", GST_BUFFER_DATA(buf));
     gst_buffer_unref (buf);
     return GST_FLOW_OK;
   }
