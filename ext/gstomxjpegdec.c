@@ -248,8 +248,8 @@ gst_omx_jpeg_dec_init_pads (GstOmxBase * base)
   port->nPortIndex = 0;
   port->eDir = OMX_DirInput;
   /* It's recommended to use 4 input buffers */
-  port->nBufferCountActual = base->input_buffers;;
-  port->nBufferSize = this->format.size_padded;
+  port->nBufferCountActual = base->input_buffers;
+  port->nBufferSize =  (this->format.width)* (this->format.height);
   port->format.video.cMIMEType = "JPEG";
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height;
