@@ -70,12 +70,7 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
 #define gst_omx_jpeg_dec_parent_class parent_class
 G_DEFINE_TYPE (GstOmxJpegDec, gst_omx_jpeg_dec, GST_TYPE_OMX_BASE);
 
-static GstCaps *gst_omx_jpeg_dec_parse (GstOmxBase * base, GstBuffer * buf);
 static gboolean gst_omx_jpeg_dec_set_caps (GstPad * pad, GstCaps * caps);
-static void gst_omx_jpeg_dec_code_to_aspectratio (guint code, gint * num,
-    gint * den);
-static void gst_omx_jpeg_dec_code_to_aspectratio (guint code, gint * num,
-    gint * den);
 static OMX_ERRORTYPE gst_omx_jpeg_dec_init_pads (GstOmxBase * this);
 static GstFlowReturn gst_omx_jpeg_dec_fill_callback (GstOmxBase *,
     OMX_BUFFERHEADERTYPE *);
@@ -102,7 +97,6 @@ gst_omx_jpeg_dec_class_init (GstOmxJpegDecClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
 
-  gstomxbase_class->parse_buffer = GST_DEBUG_FUNCPTR (gst_omx_jpeg_dec_parse);
   gstomxbase_class->parse_caps = GST_DEBUG_FUNCPTR (gst_omx_jpeg_dec_set_caps);
   gstomxbase_class->omx_fill_buffer =
       GST_DEBUG_FUNCPTR (gst_omx_jpeg_dec_fill_callback);
@@ -140,156 +134,10 @@ gst_omx_jpeg_dec_init (GstOmxJpegDec * this)
 }
 
 /* vmethod implementations */
-static void
-gst_omx_jpeg_dec_code_to_framerate (guint code, gint * num, gint * den)
-{
-  /* Taken from http://dvd.sourceforge.net/dvdinfo/mpeghdrs.html#picture */
-  switch (code) {
-    case 1:
-      *num = 24000;
-      *den = 1001;
-      break;
-    case 2:
-      *num = 24;
-      *den = 1;
-      break;
-    case 3:
-      *num = 25;
-      *den = 1;
-      break;
-    case 4:
-      *num = 30000;
-      *den = 1001;
-      break;
-    case 5:
-      *num = 30;
-      *den = 1;
-      break;
-    case 6:
-      *num = 50;
-      *den = 1;
-      break;
-    case 7:
-      *num = 60000;
-      *den = 1001;
-      break;
-    case 8:
-      *num = 60;
-      *den = 1;
-      break;
-    default:
-      *num = 0;
-      *den = 1;
-      break;
-  }
-}
-
-static void
-gst_omx_jpeg_dec_code_to_aspectratio (guint code, gint * num, gint * den)
-{
-  /* Taken from http://dvd.sourceforge.net/dvdinfo/mpeghdrs.html#picture */
-  switch (code) {
-    case 1:
-      *num = 1;
-      *den = 1;
-      break;
-    case 2:
-      *num = 4;
-      *den = 3;
-      break;
-    case 3:
-      *num = 16;
-      *den = 9;
-      break;
-    case 4:
-      *num = 2;                 // It's actually 2.21
-      *den = 1;
-      break;
-    default:
-      *num = 1;
-      *den = 1;
-      break;
-  }
-}
-
-static GstCaps *
-gst_omx_jpeg_dec_parse (GstOmxBase * base, GstBuffer * buf)
-{
-  GstOmxJpegDec *this = GST_OMX_JPEG_DEC (base);
-  const GstCaps *templatecaps = gst_pad_get_pad_template_caps (this->srcpad);
-  guint startcode = 0;
-  guint32 *data = (guint32 *) GST_BUFFER_DATA (buf);
-  GValue width = G_VALUE_INIT;
-  GValue height = G_VALUE_INIT;
-  GValue framerate = G_VALUE_INIT;
-  GValue aspectratio = G_VALUE_INIT;
-  GstCaps *caps = NULL;
-
-  /* Initialize gvalues */
-  g_value_init (&width, G_TYPE_INT);
-  g_value_init (&height, G_TYPE_INT);
-  g_value_init (&framerate, GST_TYPE_FRACTION);
-  g_value_init (&aspectratio, GST_TYPE_FRACTION);
-
-  /* 32 bits: start code */
-  startcode = GST_READ_UINT32_BE (data);
-  GST_LOG_OBJECT (this, "Reading start code: 0x%08x", startcode);
-  if (0x000001b3 != startcode)
-    goto noformat;
-  data++;
-
-  /* 12 bits: Horizontal size, 12 bits: Vertical size */
-  this->format.width = (GST_READ_UINT32_BE (data) & 0xFFF00000) >> 20;
-  g_value_set_int (&width, this->format.width);
-  this->format.height = (GST_READ_UINT32_BE (data) & 0x000FFF00) >> 8;
-  g_value_set_int (&height, this->format.height);
-  data = (guint32 *) ((gchar *) data + 3);
-
-  /* 4 bits: aspect ratio */
-  gst_omx_jpeg_dec_code_to_aspectratio ((GST_READ_UINT32_BE (data) & 0xF0) >>
-      4, &this->format.aspectratio_num, &this->format.aspectratio_den);
-  gst_value_set_fraction (&aspectratio, this->format.aspectratio_num,
-      this->format.aspectratio_den);
-
-  /* 4 bits: frame rate code */
-  gst_omx_jpeg_dec_code_to_framerate (*data & 0x0F,
-      &this->format.framerate_num, &this->format.framerate_den);
-  gst_value_set_fraction (&framerate, this->format.framerate_num,
-      this->format.framerate_den);
-
-  /* This is always fixed */
-  this->format.format = GST_VIDEO_FORMAT_NV12;
-
-  GST_LOG_OBJECT (this, "Parsed from stream:\n"
-      "\tSize: %ux%u\n"
-      "\tFormat NV12\n"
-      "\tFramerate: %u/%u\n"
-      "\tAspect Ratio: %u/%u",
-      this->format.width,
-      this->format.height,
-      this->format.framerate_num,
-      this->format.framerate_den,
-      this->format.aspectratio_num, this->format.aspectratio_den);
-
-  caps = gst_caps_copy (templatecaps);
-  gst_caps_set_value (caps, "width", &width);
-  gst_caps_set_value (caps, "height", &height);
-  gst_caps_set_value (caps, "framerate", &framerate);
-
-  this->format.size = gst_video_format_get_size (this->format.format,
-      this->format.width, this->format.height);
-
-  return caps;
-
-noformat:
-  {
-    GST_LOG_OBJECT (this, "Skipping non-sequence header");
-    return NULL;
-  }
-}
 
 #define PADX 8
 #define PADY 8
+
 static gboolean
 gst_omx_jpeg_dec_set_caps (GstPad * pad, GstCaps * caps)
 {
@@ -337,7 +185,7 @@ gst_omx_jpeg_dec_set_caps (GstPad * pad, GstCaps * caps)
 
   GST_INFO_OBJECT (this, "Parsed for input caps:\n"
       "\tSize: %ux%u\n"
-      "\tFormat NV12\n"
+      "\tFormat JPEG\n"
       "\tFramerate: %u/%u",
       this->format.width,
       this->format.height,
@@ -424,13 +272,14 @@ gst_omx_jpeg_dec_init_pads (GstOmxBase * base)
 
   port->nPortIndex = 1;
   port->eDir = OMX_DirOutput;
-  /* It's recommended to use 6 output buffers */
+  /* It's recommended to use 8 output buffers */
   port->nBufferCountActual = base->output_buffers;
   port->nBufferSize = this->format.size_padded;
-  port->format.video.cMIMEType = "JPEG";
   port->format.video.nFrameWidth = this->format.width;
   port->format.video.nFrameHeight = this->format.height_padded;
   port->format.video.nStride = this->format.width_padded;
+  port->format.video.eCompressionFormat = OMX_VIDEO_CodingUnused;
+  port->format.video.eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
   port->format.video.xFramerate =
       ((guint) ((gdouble) this->format.framerate_num) /
       this->format.framerate_den) << 16;
@@ -477,18 +326,6 @@ gst_omx_jpeg_dec_fill_callback (GstOmxBase * base,
   buffer = gst_buffer_new ();
   if (!buffer)
     goto noalloc;
-
-  i = (0 != (outbuf->nFlags & OMX_TI_BUFFERFLAG_VIDEO_FRAME_TYPE_INTERLACE));
-  if (i != this->format.interlaced) {
-    this->format.interlaced = i;
-    caps = gst_caps_copy (GST_PAD_CAPS (this->srcpad));
-    structure = gst_caps_get_structure (caps, 0);
-    if (structure) {
-      gst_structure_set (structure,
-          "interlaced", G_TYPE_BOOLEAN, this->format.interlaced, (char *) NULL);
-    }
-    gst_pad_set_caps (this->srcpad, caps);
-  }
 
   GST_BUFFER_SIZE (buffer) = this->format.size_padded;
   GST_BUFFER_CAPS (buffer) = caps;
