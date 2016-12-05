@@ -131,7 +131,7 @@ omx_init (GstPlugin * omx)
     return FALSE;
   
     if (!gst_element_register (omx, "omx_jpegdec", GST_RANK_NONE,
-          GST_TYPE_OMX_VIDEO_MIXER))
+          GST_TYPE_OMX_JPEG_DEC))
     return FALSE;
   
 return TRUE;
