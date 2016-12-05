@@ -22,7 +22,8 @@ libgstrromx_la_SOURCES = \
 	gstomxaacdec.c gstomxaacdec.h \
 	gstomxrrparser.c gstomxrrparser.h \
 	gstomxnoisefilter.c gstomxnoisefilter.h \
-	gstomxvideomixer.c gstomxvideomixer.h
+	gstomxvideomixer.c gstomxvideomixer.h \
+	gstomxjpegdec.c gstomxjpegdec.h
 
 # compiler and linker flags used to compile this rromx, set in configure.ac
 libgstrromx_la_CFLAGS = $(GST_CFLAGS) $(OMX_CFLAGS)
