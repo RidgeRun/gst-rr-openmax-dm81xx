@@ -40,6 +40,7 @@
 #include "gstomxrrparser.h"
 #include "gstomxnoisefilter.h"
 #include "gstomxbufferalloc.h"
+#include "gstomxvideomixer.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -122,6 +123,10 @@ omx_init (GstPlugin * omx)
   
   if (!gst_element_register (omx, "omxbufferalloc", GST_RANK_NONE,
           GST_TYPE_OMXBUFFERALLOC))
+    return FALSE;
+
+  if (!gst_element_register (omx, "omx_videomixer", GST_RANK_NONE,
+          GST_TYPE_OMX_VIDEO_MIXER))
     return FALSE;
   
 return TRUE;
