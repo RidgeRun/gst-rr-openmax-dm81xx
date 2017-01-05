@@ -1902,13 +1902,47 @@ gst_omx_base_event_handler (GstPad * pad, GstEvent * event)
         if (GST_OMX_FAIL (error))
           goto noflush_eos;
       }
+      /* Handle everything else as default */
+      gst_pad_event_default (pad, event);
       break;
     }
+    case GST_EVENT_FLUSH_START:
+      {
+	GST_INFO_OBJECT(this, "Flushing start");
+	/* Handle everything else as default */
+	gst_pad_event_default (pad, event);
+
+	this->fill_ret = GST_FLOW_WRONG_STATE;
+
+	break;
+      }
+    case GST_EVENT_FLUSH_STOP:
+      {
+	GST_INFO_OBJECT(this, "Flushing stop");
+	/* Handle everything else as default */
+	gst_pad_event_default (pad, event);
+
+	/*  DSP does not support flush ports */
+	if (!(this->audio_component)) {
+	  error =
+            gst_omx_base_for_each_pad (this, gst_omx_base_flush_ports,
+				       GST_PAD_UNKNOWN, NULL);
+	  if (GST_OMX_FAIL (error))
+	    goto noflush_eos;
+	}
+	break;
+      }
+     case GST_EVENT_NEWSEGMENT:
+     {
+	gst_pad_event_default (pad, event);
+	this->fill_ret = GST_FLOW_OK;
+	break;
+     }
     default:
+      /* Handle everything else as default */
+      gst_pad_event_default (pad, event);
       break;
   }
-  /* Handle everything else as default */
-  gst_pad_event_default (pad, event);
 
   return TRUE;
 
