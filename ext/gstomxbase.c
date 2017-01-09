@@ -625,7 +625,7 @@ out:
 
 flushing:
   {
-    GST_WARNING_OBJECT (this, "Discarding buffer while flushing");
+    GST_ERROR_OBJECT (this, "Discarding buffer %p while flushing", GST_BUFFER_DATA(buf));
     gst_buffer_unref (buf);
     return GST_FLOW_WRONG_STATE;
   }

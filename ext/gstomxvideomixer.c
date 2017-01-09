@@ -628,11 +628,6 @@ gst_omx_video_mixer_change_state (GstElement * element,
         goto task_failed;
       gst_collect_pads2_stop (mixer->collect);
       gst_omx_video_mixer_clear_queue (mixer);
-      gst_omx_video_mixer_stop (mixer);
-      mixer->started = FALSE;
-      mixer->push_ret = GST_FLOW_OK;
-      gst_omx_video_mixer_free_dummy_sink_pads (mixer);
-      gst_omx_video_mixer_free_outbuf_check (mixer);
       break;
     default:
       break;
@@ -644,8 +639,19 @@ gst_omx_video_mixer_change_state (GstElement * element,
   switch (transition) {
 
     case GST_STATE_CHANGE_READY_TO_NULL:
+      GST_LOG_OBJECT (mixer, "Stop omx mixer");
+
+      gst_omx_video_mixer_stop (mixer);
+      mixer->started = FALSE;
+      mixer->push_ret = GST_FLOW_OK;
+
+      gst_omx_video_mixer_free_dummy_sink_pads (mixer);
+      gst_omx_video_mixer_free_outbuf_check (mixer);
+
+      GST_LOG_OBJECT (mixer, "Free omx");
       gst_omx_video_mixer_free_omx (mixer);
 
+      GST_LOG_OBJECT (mixer, "Destroy push task");
       if (!gst_omx_video_mixer_destroy_push_task (mixer))
         goto task_failed;
       break;
