@@ -40,6 +40,7 @@
 #include "gstomxrrparser.h"
 #include "gstomxnoisefilter.h"
 #include "gstomxbufferalloc.h"
+#include "gstomxvideomixer.h"
 
 static guint _omx_ref = 0;
 
@@ -170,7 +171,12 @@ omx_init (GstPlugin * omx)
           GST_TYPE_OMXBUFFERALLOC))
     return FALSE;
 
+  if (!gst_element_register (omx, "omx_videomixer", GST_RANK_NONE,
+          GST_TYPE_OMX_VIDEO_MIXER))
+    return FALSE;
+  
   return TRUE;
+
 }
 
 /* gstreamer looks for this structure to register omxs
