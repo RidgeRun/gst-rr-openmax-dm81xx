@@ -80,7 +80,7 @@ static void gst_omx_buffer_alloc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_buffer_alloc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-
+static void gst_omx_buffer_alloc_finalize (GObject * object);
 static gboolean gst_omx_buffer_alloc_set_caps (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_omx_buffer_alloc_chain (GstPad * pad, GstBuffer * buf);
 static OMX_ERRORTYPE gst_omx_buffer_alloc_free_buffers (GstOmxBufferAlloc *
@@ -127,6 +127,7 @@ gst_omx_buffer_alloc_class_init (GstOmxBufferAllocClass * klass)
 
   gobject_class->set_property = gst_omx_buffer_alloc_set_property;
   gobject_class->get_property = gst_omx_buffer_alloc_get_property;
+  gobject_class->finalize = gst_omx_buffer_alloc_finalize;
   gstelement_class->change_state = gst_omx_buffer_alloc_change_state;
 
   g_object_class_install_property (gobject_class, PROP_SILENT,
@@ -145,6 +146,8 @@ static void
 gst_omx_buffer_alloc_init (GstOmxBufferAlloc * this,
     GstOmxBufferAllocClass * gclass)
 {
+  gst_omx_init ();
+  
   this->silent = GST_OMX_BUFFERALLOC_SILENT_DEFAULT;
   this->num_buffers = GST_OMX_BUFFERALLOC_NUMBUFFERS_DEFAULT;
   this->buffers = NULL;
@@ -219,6 +222,16 @@ gst_omx_buffer_alloc_get_property (GObject * object, guint prop_id,
       break;
   }
 }
+
+static void
+gst_omx_buffer_alloc_finalize (GObject * object)
+{
+  gst_omx_deinit ();
+
+  /* Chain up to the parent class */
+  G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
 
 static gboolean
 gst_omx_buffer_alloc_set_caps (GstPad * pad, GstCaps * caps)
